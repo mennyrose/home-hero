@@ -7,7 +7,8 @@ import {
   BookOpen, Backpack, Guitar, Brush, Star, Check, CheckCircle,
   Clock, Loader2, AlertTriangle, RefreshCcw, RotateCcw, Minus, Plus, Trash2,
   Sun, Moon, Cloud, ShoppingBag, List, Menu, Utensils,
-  Wifi, WifiOff, Gamepad2, Sparkles, Shirt, Bath, Dog, Footprints, ThumbsUp
+  Wifi, WifiOff, Gamepad2, Sparkles, Shirt, Bath, Dog, Footprints, ThumbsUp,
+  Disc // For dishwasher plate representation
 } from 'lucide-react';
 
 // ==========================================
@@ -34,13 +35,50 @@ const AVATARS = {
   3: "./noam.png"
 };
 
+// Custom Toothbrush Icon
+const ToothbrushIcon = ({ size = 24, className }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M2 12h1c1 0 1 .5 1 1v4c0 1 1 2 2 2h2c1 0 2-1 2-2v-3c0-1.5 2-2 2-4 0-1.5-1-3-3-3s-2.5 1-2.5 1" />
+    <path d="M12 5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z" />
+    <line x1="12" y1="5" x2="18" y2="5" />
+    <line x1="12" y1="7" x2="18" y2="7" />
+  </svg>
+);
+
+const DishwasherIcon = ({ size = 24 }) => (
+    <div className="relative" style={{ width: size, height: size }}>
+        <Disc size={size} />
+        <Sparkles size={size / 2} className="absolute -top-1 -right-1 text-blue-400 fill-current" />
+    </div>
+);
+
+const DinnerTimeIcon = ({ size = 24 }) => (
+    <div className="flex items-center gap-0">
+        <Utensils size={size} />
+        <Clock size={size * 0.7} className="text-red-500 -ml-2 mb-2" />
+    </div>
+);
+
 const ICON_MAP = {
   bed: { icon: BedDouble, label: 'מיטה' },
-  brush: { icon: Brush, label: 'צחצוח' },
+  brush: { icon: ToothbrushIcon, label: 'צחצוח' },
   book: { icon: BookOpen, label: 'לימודים' },
   backpack: { icon: Backpack, label: 'תיק' },
   guitar: { icon: Guitar, label: 'נגינה' },
   food: { icon: Utensils, label: 'אוכל' },
+  dishwasher: { icon: DishwasherIcon, label: 'מדיח' },
+  dinner: { icon: DinnerTimeIcon, label: 'ארוחה בזמן' },
   toy: { icon: Gamepad2, label: 'צעצועים' },
   clean: { icon: Sparkles, label: 'ניקיון' },
   clothes: { icon: Shirt, label: 'בגדים' },
@@ -55,7 +93,6 @@ const ICON_MAP = {
 // ==========================================
 const ADMIN_EMAILS = ["mennyr@gmail.com", "reulita10@gmail.com"];
 
-// הגדרות Firebase שהוטמעו מהבקשה שלך
 const MANUAL_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCpN2ExfgyJhWGhAZieXdo0G9-i3qVXPiw",
   authDomain: "homehero-f43e7.firebaseapp.com",
@@ -66,14 +103,18 @@ const MANUAL_FIREBASE_CONFIG = {
   measurementId: "G-Q10D5WT1YD"
 };
 
-// --- אתחול Firebase ---
 let firebaseConfig = null;
 let app, auth, db;
 let appId = 'family-game-v1'; 
 
 try {
-  // עדיפות לקונפיגורציה הידנית כדי להבטיח חיבור לפרויקט שלך
-  firebaseConfig = MANUAL_FIREBASE_CONFIG;
+  if (typeof __firebase_config !== 'undefined') {
+    firebaseConfig = JSON.parse(__firebase_config);
+    if (typeof __app_id !== 'undefined') appId = __app_id;
+  } 
+  else if (MANUAL_FIREBASE_CONFIG.apiKey !== "PASTE_API_KEY_HERE") {
+    firebaseConfig = MANUAL_FIREBASE_CONFIG;
+  }
 
   if (firebaseConfig) {
     app = initializeApp(firebaseConfig);
@@ -86,8 +127,6 @@ try {
   console.error("Firebase init error:", e);
 }
 
-// שימוש ב-db רק אם הוא אותחל
-// שימו לב: הוספתי 'main' בסוף הנתיב כדי ליצור נתיב תקין למסמך (מספר זוגי של סגמנטים)
 const MAIN_DOC_REF = db ? doc(db, 'artifacts', appId, 'public', 'data', 'family', 'main') : null;
 
 const getIconComponent = (iconKey, title) => {
@@ -96,7 +135,7 @@ const getIconComponent = (iconKey, title) => {
       return <Icon size={32} />;
   }
   if (title.includes("מיטה")) return <BedDouble size={32} />;
-  if (title.includes("שיניים")) return <Brush size={32} />;
+  if (title.includes("שיניים")) return <ToothbrushIcon size={32} />;
   return <Star size={32} />;
 };
 
@@ -203,7 +242,7 @@ const ParentLogin = ({ onLogin }) => (
   </div>
 );
 
-const BigRedButton = ({ onClick, label, iconKey }) => (
+const BigRedButton = ({ onClick, label, iconKey, points }) => (
   <button 
     onClick={onClick}
     className={`w-40 h-40 rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse`}
@@ -212,6 +251,7 @@ const BigRedButton = ({ onClick, label, iconKey }) => (
         {getIconComponent(iconKey, label)}
     </div>
     <span className="text-xl font-black mt-1 leading-none text-center px-2 text-shadow-black">{label}</span>
+    <span className="text-sm font-bold bg-yellow-400 text-black px-2 rounded-full border border-black shadow-sm transform -rotate-3">{points} נק'</span>
   </button>
 );
 
@@ -381,6 +421,8 @@ export default function App() {
         else if (action === 'add_task') {
             const kid = newData.kids.find(k => k.id === parseInt(payload.targetKidId));
             if (kid) kid.tasks.push(payload.task);
+            setToastMsg("המשימה נוספה בהצלחה!");
+            setTimeout(() => setToastMsg(null), 2500);
         } 
         else if (action === 'reset_boss') newData.bossHP = newData.maxBossHP;
         else if (action === 'set_time') newData.currentTimePhase = payload;
@@ -448,6 +490,7 @@ export default function App() {
             </button>
           </div>
           <div className="p-4">
+             {toastMsg && <Toast message={toastMsg} />}
              <AdminPanelContent data={data} onAction={handleAdminAction} />
           </div>
         </div>
@@ -532,7 +575,13 @@ export default function App() {
             <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-pink-100 overflow-visible">
                <div className="flex-1 flex flex-col items-center justify-start relative z-20 w-full gap-4 mt-4">
                   {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase).map(task => (
-                     <BigRedButton key={task.id} label={task.title} iconKey={task.icon} onClick={() => handleTaskAction(3, task, 'complete')} />
+                     <BigRedButton 
+                        key={task.id} 
+                        label={task.title} 
+                        points={data.kids[2].activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value}
+                        iconKey={task.icon} 
+                        onClick={() => handleTaskAction(3, task, 'complete')} 
+                     />
                   ))}
                </div>
             </div>
@@ -541,7 +590,13 @@ export default function App() {
             <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-purple-100 overflow-visible">
                <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto mt-4">
                   {data.kids[1].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open' && t.days.includes(data.currentDay)).map(task => (
-                     <TaskItem key={task.id} title={task.title} points={kid => kid.activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} iconKey={task.icon} onClick={() => handleTaskAction(2, task, 'complete')} />
+                     <TaskItem 
+                        key={task.id} 
+                        title={task.title} 
+                        points={data.kids[1].activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} 
+                        iconKey={task.icon} 
+                        onClick={() => handleTaskAction(2, task, 'complete')} 
+                     />
                   ))}
                </div>
             </div>
@@ -550,7 +605,13 @@ export default function App() {
             <div className="relative p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-blue-100 overflow-visible">
                <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto mt-4">
                   {data.kids[0].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open' && t.days.includes(data.currentDay)).map(task => (
-                     <TaskItem key={task.id} title={task.title} points={kid => kid.activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} iconKey={task.icon} onClick={() => handleTaskAction(1, task, 'complete')} />
+                     <TaskItem 
+                        key={task.id} 
+                        title={task.title} 
+                        points={data.kids[0].activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} 
+                        iconKey={task.icon} 
+                        onClick={() => handleTaskAction(1, task, 'complete')} 
+                     />
                   ))}
                </div>
             </div>
