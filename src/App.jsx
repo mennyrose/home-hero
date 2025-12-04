@@ -1,54 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { 
-  getFirestore, 
-  doc, 
-  onSnapshot, 
-  updateDoc, 
-  setDoc, 
-  getDoc 
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithPopup,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signOut
-} from 'firebase/auth';
-import { 
-  Shield, 
-  Zap, 
-  Check, 
-  Star, 
-  Settings, 
-  ShoppingBag, 
-  List, 
-  Lock, 
-  LogOut, 
-  User, 
-  Ban, 
-  Plus, 
-  Minus, 
-  RefreshCcw, 
-  Trash2,
-  BedDouble,
-  BookOpen,
-  Backpack,
-  Guitar,
-  Brush,
-  Utensils,
-  Moon,
-  Sun,
-  Cloud,
-  CheckCircle,
-  Clock,
-  Loader2,
-  AlertTriangle
+  Shield, Zap, Settings, Lock, LogOut, User, BedDouble, 
+  BookOpen, Backpack, Guitar, Brush, Star, Check, CheckCircle,
+  Clock, Loader2, AlertTriangle, RefreshCcw, Minus, Plus, Trash2,
+  Sun, Moon, Cloud, ShoppingBag, List, Menu, Utensils,
+  Wifi, WifiOff // הוספתי את הייבוא החסר כאן!
 } from 'lucide-react';
 
 // ==========================================
-// 1. הגדרות וסגנונות קומיקס (Global Constants)
+// 1. הגדרות וסגנונות קומיקס
 // ==========================================
 
 const COMIC_BORDER = "border-4 border-black";
@@ -56,22 +19,29 @@ const COMIC_SHADOW = "shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]";
 const COMIC_SHADOW_SM = "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]";
 const COMIC_BTN = `transition-all active:translate-y-1 active:shadow-none ${COMIC_BORDER} ${COMIC_SHADOW}`;
 
-// רקע קומיקס (חצי טון + עיר)
-const BG_IMAGE_URL = "https://lh3.googleusercontent.com/gg-dl/ABS2GSnrxVSncEvsWhvXz4r6bL4TvlF5bSfpMutmvT_goqtPupI-NfHJb-hIazX93z9R6xLAGgmLRmZ5Fnov0gPpMcIZi9WyQ21FFRdVdEzJmKApe-Mmazj-AhdZoCq9ySisgYRiNgWa33u7itch3TtnrURRz8D43iftcjMzYTycGPYuk3hWOw=s1024-rj";
-
-// תמונות אווטאר (זמני - ניתן להחלפה)
-const AVATARS = {
-  1: "https://api.dicebear.com/7.x/avataaars/svg?seed=Itamar&backgroundColor=b6e3f4",
-  2: "https://api.dicebear.com/7.x/avataaars/svg?seed=Roni&backgroundColor=c0aede",
-  3: "https://api.dicebear.com/7.x/avataaars/svg?seed=Noam&backgroundColor=ffdfbf"
+// רקע כללי - רשת נקודות כחולה (Halftone)
+const BG_STYLE = {
+  backgroundImage: `
+    radial-gradient(circle, #3b82f6 2px, transparent 2.5px),
+    linear-gradient(to bottom, #60a5fa, #2563eb)
+  `,
+  backgroundSize: '20px 20px, 100% 100%',
+  backgroundPosition: '0 0, 0 0'
 };
 
 // ==========================================
-// 2. הגדרות מערכת (Config & Helpers)
+// 2. תמונות הדמויות (PNG שקוף)
 // ==========================================
+const AVATARS = {
+  1: "/itamar.png", // תיקון נתיב: / מוביל לתיקיית public
+  2: "/roni.png",
+  3: "/noam.png"
+};
 
+// ==========================================
+// 3. הגדרות מערכת
+// ==========================================
 const ADMIN_EMAILS = ["mennyr@gmail.com", "reulita10@gmail.com"];
-
 const MY_FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -87,11 +57,11 @@ try {
   app = initializeApp(MY_FIREBASE_CONFIG);
   auth = getAuth(app);
   db = getFirestore(app);
-} catch (e) { console.error("Firebase Init Error:", e); }
+} catch (e) { console.error(e); }
 
 const MAIN_DOC_REF = db ? doc(db, 'families', 'myFamily') : null;
 
-// מיפוי אייקונים לפי טקסט
+// מיפוי אייקונים
 const getIconForTask = (title) => {
   if (title.includes("מיטה")) return <BedDouble size={32} />;
   if (title.includes("שיניים")) return <Brush size={32} />;
@@ -102,24 +72,20 @@ const getIconForTask = (title) => {
   return <Star size={32} />;
 };
 
-// עזרי זמן
 const DAYS_HEBREW = { sunday: 'ראשון', monday: 'שני', tuesday: 'שלישי', wednesday: 'רביעי', thursday: 'חמישי', friday: 'שישי', saturday: 'שבת' };
 const TIME_HEBREW = { morning: 'בוקר', noon: 'צהריים', evening: 'ערב' };
 
 const getRealTimeStatus = () => {
   const now = new Date();
   const hour = now.getHours();
-  const dayIndex = now.getDay();
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   let phase = 'morning';
   if (hour >= 12 && hour < 17) phase = 'noon';
   if (hour >= 17 || hour < 6) phase = 'evening';
-  return { currentDay: days[dayIndex], currentTimePhase: phase };
+  return { currentDay: days[now.getDay()], currentTimePhase: phase };
 };
-
 const realTime = getRealTimeStatus();
 
-// נתונים התחלתיים
 const INITIAL_DATA = { 
   familyGoal: 350, bossHP: 500, maxBossHP: 500, currentDay: realTime.currentDay, currentTimePhase: realTime.currentTimePhase,
   kids: [
@@ -130,19 +96,20 @@ const INITIAL_DATA = {
 };
 
 // ==========================================
-// 3. קומפוננטות UI (Comic Style)
+// 4. קומפוננטות UI
 // ==========================================
 
-const BurstTitle = ({ text }) => (
-  <div className="relative inline-block rotate-[-2deg] mb-2">
+const MainTitle = () => (
+  <div className="relative z-20 transform -rotate-2 mb-4">
     <div className={`absolute inset-0 bg-yellow-400 transform skew-x-12 scale-110 ${COMIC_BORDER} ${COMIC_SHADOW}`}></div>
     <h1 className="relative text-3xl md:text-5xl font-black text-black px-6 py-2 uppercase tracking-tighter" style={{ textShadow: "2px 2px 0 #fff" }}>
-      {text}
+      גיבורי הבית
     </h1>
   </div>
 );
 
-const BossBar = ({ current, max }) => {
+// תוקן: BossHP במקום BossBar
+const BossHP = ({ current, max }) => {
   const percent = Math.max(0, Math.min(100, (current / max) * 100));
   return (
     <div className="w-full max-w-md mx-auto mt-2 px-2">
@@ -151,11 +118,7 @@ const BossBar = ({ current, max }) => {
         <span className="font-bold text-white text-shadow-black text-xs md:text-sm">{current} / {max} HP</span>
       </div>
       <div className={`h-6 md:h-8 w-full bg-slate-800 ${COMIC_BORDER} relative overflow-hidden rounded-sm`}>
-        <div 
-          className="h-full bg-red-500 transition-all duration-500 relative"
-          style={{ width: `${percent}%` }}
-        >
-          {/* פסים אלכסוניים */}
+        <div className="h-full bg-red-500 transition-all duration-500 relative" style={{ width: `${percent}%` }}>
           <div className="absolute inset-0 w-full h-full" style={{ backgroundImage: "linear-gradient(45deg,rgba(0,0,0,.1) 25%,transparent 25%,transparent 50%,rgba(0,0,0,.1) 50%,rgba(0,0,0,.1) 75%,transparent 75%,transparent)", backgroundSize: "10px 10px" }}></div>
         </div>
       </div>
@@ -176,11 +139,17 @@ const ComicTab = ({ icon: Icon, label, active, onClick }) => (
   </button>
 );
 
-const SpeechBubble = ({ children, color = "bg-white", tailPosition = "right" }) => (
-  <div className={`relative ${color} p-3 rounded-2xl ${COMIC_BORDER} ${COMIC_SHADOW_SM} mb-3 w-full`}>
-    {children}
-    <div className={`absolute bottom-[-16px] ${tailPosition === 'right' ? 'right-6' : 'left-6'} w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[16px] border-t-black`}></div>
-    <div className={`absolute bottom-[-10px] ${tailPosition === 'right' ? 'right-[27px]' : 'left-[27px]'} w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[12px] border-t-${color.replace('bg-', '')}`}></div>
+const NameBubble = ({ name, points }) => (
+  <div className={`bg-yellow-400 p-2 rounded-2xl ${COMIC_BORDER} ${COMIC_SHADOW_SM} w-full transform -rotate-1 relative z-20`}>
+    <div className="text-center">
+      <h2 className="text-2xl font-black leading-none text-black">{name}</h2>
+      <div className="flex gap-2 justify-center text-lg font-bold text-black items-center mt-1">
+          <Star className="fill-black text-black w-4 h-4" /> 
+          <span>{points}</span>
+      </div>
+    </div>
+    <div className="absolute -left-3 top-1/2 w-0 h-0 border-t-[8px] border-t-transparent border-r-[12px] border-r-black border-b-[8px] border-b-transparent transform rotate-12"></div>
+    <div className="absolute -left-1 top-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-r-[10px] border-r-yellow-400 border-b-[6px] border-b-transparent transform rotate-12 mt-[1px]"></div>
   </div>
 );
 
@@ -213,8 +182,42 @@ const ParentLogin = ({ onLogin }) => (
   </div>
 );
 
+const BigRedButton = ({ onClick, label }) => (
+  <button 
+    onClick={onClick}
+    className={`w-40 h-40 rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse`}
+  >
+    <div className="transform scale-150 mb-2 text-white drop-shadow-[2px_2px_0_#000]">{getIconForTask(label)}</div>
+    <span className="text-xl font-black mt-1 leading-none text-center px-2 text-shadow-black">{label}</span>
+  </button>
+);
+
+const TaskItem = ({ title, points, icon: Icon, isDone, onClick }) => (
+  <div className="relative group mb-3 w-full">
+     <div className={`bg-white border-4 border-black p-2 rounded-xl flex items-center justify-between shadow-[4px_4px_0px_0px_#ccc] group-hover:shadow-[4px_4px_0px_0px_#000] transition-all`}>
+        <div className="flex items-center gap-2 overflow-hidden">
+           <div className={`p-2 rounded-lg border-2 border-black flex-shrink-0 bg-gray-50`}>
+              {Icon}
+           </div>
+           <div className="min-w-0">
+              <div className="font-black text-base leading-tight truncate">{title}</div>
+              <div className="text-xs font-bold bg-yellow-300 inline-block px-1 border border-black mt-1">
+                {points} נק'
+              </div>
+           </div>
+        </div>
+        <button 
+          onClick={onClick}
+          className="w-10 h-10 border-4 border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ml-2"
+        >
+          {isDone && <Check size={24} strokeWidth={4} />}
+        </button>
+     </div>
+  </div>
+);
+
 // ==========================================
-// 4. האפליקציה הראשית (Logic + Layout)
+// 5. האפליקציה הראשית
 // ==========================================
 
 export default function App() {
@@ -258,7 +261,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Time Sync
+  // Time Auto-Update
   useEffect(() => {
     if (!data) return;
     const interval = setInterval(() => {
@@ -403,110 +406,126 @@ export default function App() {
 
   // --- תצוגת קיוסק (ילדים) ---
   return (
-    <div className="min-h-screen font-comic overflow-hidden flex flex-col" 
-         style={{ backgroundImage: `url(${BG_IMAGE_URL})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+    <div className="min-h-screen font-comic overflow-hidden flex flex-col relative" style={BG_STYLE}>
       
-      <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(0,0,0,0.15)_1px,transparent_1px)] [background-size:8px_8px] pointer-events-none"></div>
+      {/* שכבת כהות קלה לקריאות */}
+      <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
       
       {showConfetti && <div className="fixed inset-0 z-50 pointer-events-none"><Confetti active={true}/></div>}
 
-      <header className="relative z-10 pt-4 pb-2 text-center">
-        <BurstTitle text="גיבורי הבית" />
-        <BossBar current={data.bossHP} max={data.maxBossHP} />
-        <div className="flex justify-center mt-2">
-             <div className={`bg-white px-3 py-1 rounded-full text-xs font-black text-black flex items-center gap-2 ${COMIC_BORDER} shadow-sm`}>
-                <span className="flex items-center gap-1">
-                  {data.currentTimePhase === 'morning' ? <Sun size={14} className="text-orange-500"/> : data.currentTimePhase === 'noon' ? <Cloud size={14} className="text-blue-400"/> : <Moon size={14} className="text-indigo-600"/>}
-                  {TIME_HEBREW[data.currentTimePhase]}
-                </span>
-                <span className="w-px h-3 bg-black"></span>
-                <span>יום {DAYS_HEBREW[data.currentDay]}</span>
-             </div>
+      {/* HEADER */}
+      <header className="relative z-20 flex justify-between items-start p-4">
+        <div className="w-1/3 pt-2">
+           {/* כפתור הורים נסתר */}
+           <button onClick={() => setShowLoginModal(true)} className="opacity-50 hover:opacity-100 transition"><Settings className="text-white drop-shadow-md"/></button>
+        </div>
+        <div className="w-1/3 flex justify-center">
+           <MainTitle />
+        </div>
+        <div className="w-1/3 flex justify-end">
+           <BossHP current={data.bossHP} max={data.maxBossHP} />
         </div>
       </header>
 
+      {/* MAIN COMIC PANELS - 3 Columns Layout */}
       {activeTab === 'tasks' && (
-        <div className="flex-1 relative z-10 p-2 md:p-4 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
-            {data.kids.map((kid) => (
-              <div key={kid.id} className={`flex flex-col h-full bg-white ${COMIC_BORDER} ${COMIC_SHADOW} p-2 relative overflow-hidden`}>
-                {/* Header Section of Kid Card */}
-                <div className={`absolute top-0 left-0 right-0 h-28 ${kid.color} border-b-4 border-black z-0`}></div>
-                
-                <div className="relative z-10 flex flex-col items-center -mt-1">
-                   <div className={`w-20 h-20 rounded-full ${COMIC_BORDER} bg-white overflow-hidden mb-1`}>
-                      <img src={AVATARS[kid.id]} alt={kid.name} className="w-full h-full object-cover" />
-                   </div>
-                   <SpeechBubble color="bg-white">
-                      <div className="text-center">
-                        <h2 className="text-2xl font-black leading-none">{kid.name}</h2>
-                        <div className="flex gap-2 justify-center text-lg font-bold text-black items-center mt-1">
-                           <Star className="fill-yellow-400 text-black w-5 h-5" /> 
-                           <span>{kid.points}</span>
-                        </div>
-                      </div>
-                   </SpeechBubble>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-1 pb-2 space-y-3 mt-1">
-                   {kid.ageGroup === 'toddler' ? (
-                      <div className="h-full flex flex-col justify-center items-center gap-4">
-                         {kid.tasks.filter(t => t.time === data.currentTimePhase).map(task => (
-                           <button 
-                             key={task.id}
-                             onClick={() => handleTaskAction(kid.id, task, 'complete')}
-                             className={`w-40 h-40 rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse`}
-                           >
-                             <div className="transform scale-150 mb-2">{getIconForTask(task.title)}</div>
-                             <span className="text-xl font-black mt-1 leading-none text-center px-2">{task.title}</span>
-                           </button>
-                         ))}
-                         {kid.tasks.filter(t => t.time === data.currentTimePhase).length === 0 && (
-                           <div className="text-center font-bold text-gray-400 bg-white p-4 border-2 border-black border-dashed rounded-xl">אין משימות כרגע!</div>
-                         )}
-                      </div>
-                   ) : (
-                      <>
-                        {kid.tasks.filter(t => t.time === data.currentTimePhase && t.days.includes(data.currentDay) && t.status === 'open').map(task => (
-                          <div key={task.id} className="relative group">
-                             <div className={`bg-white border-4 border-black p-2 rounded-xl flex items-center justify-between shadow-[4px_4px_0px_0px_#ccc] group-hover:shadow-[4px_4px_0px_0px_#000] transition-all`}>
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                   <div className={`p-2 rounded-lg border-2 border-black ${kid.lightColor} flex-shrink-0`}>
-                                      {getIconForTask(task.title)}
-                                   </div>
-                                   <div className="min-w-0">
-                                      <div className="font-black text-base leading-tight truncate">{task.title}</div>
-                                      <div className="text-xs font-bold bg-yellow-300 inline-block px-1 border border-black mt-1">
-                                        {kid.activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} נק'
-                                      </div>
-                                   </div>
-                                </div>
-                                <button 
-                                  onClick={() => handleTaskAction(kid.id, task, 'complete')}
-                                  className="w-10 h-10 border-4 border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ml-2"
-                                >
-                                </button>
-                             </div>
-                          </div>
-                        ))}
-                        {kid.tasks.filter(t => t.status === 'pending_approval' && t.time === data.currentTimePhase).map(task => (
-                           <div key={task.id} className="opacity-60 bg-gray-100 border-4 border-gray-400 border-dashed p-2 rounded-xl flex items-center gap-2">
-                              <Clock size={18}/>
-                              <span className="font-bold text-sm line-through decoration-2">{task.title}</span>
-                           </div>
-                        ))}
-                        {kid.tasks.filter(t => t.time === data.currentTimePhase && t.days.includes(data.currentDay) && t.status === 'open').length === 0 && (
-                           <div className="text-center py-6 text-gray-400 font-bold border-2 border-dashed border-gray-300 rounded-xl">
-                             אין משימות לזמן זה 😴
-                           </div>
-                        )}
-                      </>
-                   )}
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="flex-1 relative z-30 px-2 md:px-4 pb-4 mt-20 overflow-visible">
+        
+        {/* Popping Characters Container */}
+        <div className="grid grid-cols-3 gap-0 absolute top-[-100px] md:top-[-110px] left-2 md:left-4 right-2 md:right-4 z-40 pointer-events-none">
+            {/* NOAM - LEFT */}
+            <div className="relative h-20 flex justify-center">
+                <img src={AVATARS[3]} className="w-40 md:w-48 h-auto object-contain absolute bottom-[-45px] z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]" alt="Noam" />
+            </div>
+            {/* RONI - CENTER */}
+            <div className="relative h-20 flex justify-center">
+                <img src={AVATARS[2]} className="w-36 md:w-44 h-auto object-contain absolute bottom-[-45px] z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]" alt="Roni" />
+            </div>
+            {/* ITAMAR - RIGHT */}
+            <div className="relative h-20 flex justify-center">
+                <img src={AVATARS[1]} className="w-40 md:w-48 h-auto object-contain absolute bottom-[-45px] z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-x-[-1]" alt="Itamar" />
+            </div>
         </div>
+
+        <div className="grid grid-cols-3 h-full gap-0 border-4 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)] relative z-30">
+            
+            {/* NOAM COLUMN */}
+            <div className="relative border-l-4 border-black p-2 pt-20 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-pink-100 overflow-visible">
+               <div className="relative z-10 w-full mb-2">
+                  <NameBubble name={data.kids[2].name} points={data.kids[2].points} />
+               </div>
+               <div className="flex-1 flex flex-col items-center justify-start relative z-20 w-full gap-4">
+                  {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase).map(task => (
+                     <BigRedButton key={task.id} label={task.title} onClick={() => handleTaskAction(3, task, 'complete')} />
+                  ))}
+                  {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase).length === 0 && (
+                     <div className="text-center font-bold text-gray-400 bg-white/80 p-2 border-2 border-black border-dashed rounded-xl transform rotate-3 text-xs md:text-sm">אין משימות 🎉</div>
+                  )}
+               </div>
+               <div className="absolute bottom-2 left-2 flex gap-2 font-bold text-xs bg-white border-2 border-black px-2 py-1 rounded z-20">
+                  <div className="flex items-center gap-1"><Shield size={12}/> {data.kids[2].inventory.shields}</div>
+               </div>
+            </div>
+
+            {/* RONI COLUMN */}
+            <div className="relative border-l-4 border-black p-2 pt-20 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-purple-100 overflow-visible">
+               <div className="relative z-10 w-full mb-2">
+                  <NameBubble name={data.kids[1].name} points={data.kids[1].points} />
+               </div>
+               <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto">
+                  {data.kids[1].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open' && t.days.includes(data.currentDay)).map(task => (
+                     <TaskItem 
+                        key={task.id} 
+                        title={task.title} 
+                        points={kid => kid.activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} 
+                        icon={getIconForTask(task.title)} 
+                        onClick={() => handleTaskAction(2, task, 'complete')}
+                     />
+                  ))}
+                  {/* Pending */}
+                  {data.kids[1].tasks.filter(t => t.status === 'pending_approval' && t.time === data.currentTimePhase).map(task => (
+                     <div key={task.id} className="opacity-60 bg-gray-100 border-2 border-gray-400 border-dashed p-1 rounded-lg flex items-center gap-1">
+                        <Clock size={14}/>
+                        <span className="font-bold text-xs line-through">{task.title}</span>
+                     </div>
+                  ))}
+               </div>
+               <div className="absolute bottom-2 right-2 flex gap-1 font-bold text-xs bg-white border-2 border-black px-2 py-1 rounded z-20">
+                  <div className="flex items-center gap-1"><Shield size={12}/> {data.kids[1].inventory.shields}</div>
+                  <div className="flex items-center gap-1"><Zap size={12}/> {data.kids[1].activeEffects.doublePointsUntil > 0 ? 'ON' : 'OFF'}</div>
+               </div>
+            </div>
+
+            {/* ITAMAR COLUMN */}
+            <div className="relative p-2 pt-20 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-blue-100 overflow-visible">
+               <div className="relative z-10 w-full mb-2">
+                  <NameBubble name={data.kids[0].name} points={data.kids[0].points} />
+               </div>
+               <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto">
+                  {data.kids[0].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open' && t.days.includes(data.currentDay)).map(task => (
+                     <TaskItem 
+                        key={task.id} 
+                        title={task.title} 
+                        points={kid => kid.activeEffects.doublePointsUntil > Date.now() ? task.value * 2 : task.value} 
+                        icon={getIconForTask(task.title)} 
+                        onClick={() => handleTaskAction(1, task, 'complete')}
+                     />
+                  ))}
+                  {/* Pending */}
+                  {data.kids[0].tasks.filter(t => t.status === 'pending_approval' && t.time === data.currentTimePhase).map(task => (
+                     <div key={task.id} className="opacity-60 bg-gray-100 border-2 border-gray-400 border-dashed p-1 rounded-lg flex items-center gap-1">
+                        <Clock size={14}/>
+                        <span className="font-bold text-xs line-through">{task.title}</span>
+                     </div>
+                  ))}
+               </div>
+               <div className="absolute bottom-2 right-2 flex gap-1 font-bold text-xs bg-white border-2 border-black px-2 py-1 rounded z-20">
+                  <div className="flex items-center gap-1"><Shield size={12}/> {data.kids[0].inventory.shields}</div>
+               </div>
+            </div>
+
+        </div>
+      </div>
       )}
 
       {activeTab === 'shop' && <ShopView kids={data.kids} onBuy={handleTaskAction} />}
@@ -519,35 +538,41 @@ export default function App() {
          </div>
       )}
 
-      <nav className="relative z-20 bg-black pt-2 px-2 pb-safe">
-        <div className="flex max-w-lg mx-auto">
-          <ComicTab icon={List} label="משימות" active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} />
-          <ComicTab icon={ShoppingBag} label="חנות" active={activeTab === 'shop'} onClick={() => setActiveTab('shop')} />
-          <ComicTab icon={Settings} label="הגדרות" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-        </div>
-      </nav>
+      <div className="relative z-20 px-4 pb-4 flex justify-center gap-2 md:gap-4 mt-auto">
+         <button onClick={() => setActiveTab('tasks')} className={`bg-blue-500 text-white text-sm md:text-xl font-black px-4 md:px-8 py-3 rounded-xl ${COMIC_BTN} ${activeTab === 'tasks' ? 'ring-4 ring-yellow-400' : ''}`}>משימות</button>
+         <button onClick={() => setActiveTab('shop')} className={`bg-orange-500 text-white text-sm md:text-xl font-black px-4 md:px-8 py-3 rounded-xl ${COMIC_BTN} ${activeTab === 'shop' ? 'ring-4 ring-yellow-400' : ''}`}>חנות</button>
+         <button onClick={() => setActiveTab('settings')} className={`bg-gray-500 text-white text-sm md:text-xl font-black px-4 md:px-8 py-3 rounded-xl ${COMIC_BTN} ${activeTab === 'settings' ? 'ring-4 ring-yellow-400' : ''}`}>הגדרות</button>
+      </div>
 
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-           <div className={`relative w-full max-w-sm`}>
-             <button onClick={() => setShowLoginModal(false)} className="absolute -top-6 -right-0 text-white font-bold mb-2">סגור X</button>
+           <div className="relative w-full max-w-sm">
+             <button onClick={() => setShowLoginModal(false)} className="absolute -top-10 right-0 text-white font-bold text-xl">סגור</button>
              <ParentLogin onLogin={handleParentLogin} />
            </div>
         </div>
       )}
+      
+      <div className="fixed bottom-6 right-6 z-40 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-mono shadow border border-slate-200 flex items-center gap-2" dir="ltr">
+        {status === 'connected' ? (
+          <><Wifi size={12} className="text-green-500"/> <span className="text-green-700">Online</span></>
+        ) : (
+          <><WifiOff size={12} className="text-red-500"/> <span className="text-red-600">{status}</span></>
+        )}
+      </div>
     </div>
   );
 }
 
 // --- Shop View ---
 const ShopView = ({ kids, onBuy }) => (
-  <div className="flex-1 p-4 overflow-y-auto bg-white/95 m-4 border-4 border-black rounded-xl relative z-20">
+  <div className="flex-1 p-4 overflow-y-auto bg-white/95 m-4 border-4 border-black rounded-xl relative z-20 mt-20">
      <h2 className="text-4xl font-black text-center mb-8 uppercase tracking-widest bg-yellow-300 border-4 border-black inline-block px-4 rotate-[-2deg] mx-auto shadow-[4px_4px_0px_0px_#000]">חנות הכוחות</h2>
      <div className="grid grid-cols-1 gap-6">
         {kids.filter(k => k.ageGroup !== 'toddler').map(kid => (
            <div key={kid.id} className="border-b-4 border-dashed border-gray-300 pb-6">
               <div className="flex items-center gap-3 mb-4 bg-gray-100 p-2 rounded-lg border-2 border-black">
-                 <img src={AVATARS[kid.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white"/>
+                 <img src={AVATARS[kid.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white object-cover"/>
                  <span className="font-black text-lg">{kid.name}</span>
                  <span className="bg-yellow-400 px-2 border-2 border-black font-bold text-sm ml-auto shadow-[2px_2px_0px_0px_#000]">יש לך: {kid.points} נק'</span>
               </div>

@@ -7,27 +7,25 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        'comic': ['Rubik', 'sans-serif'], // שימוש בפונט שהגדרנו ב-CSS
+        'comic': ['Rubik', 'sans-serif'], // הפונט המיוחד לקומיקס
       },
-      textShadow: {
-        'black': '2px 2px 0px #000000', // צללית קשה שחורה לטקסט
-      },
+      // הגדרת אנימציה איטית לכוכבים/רקע אם נצטרך
       animation: {
-        'spin-slow': 'spin 3s linear infinite', // אנימציה איטית לכוכבים
+        'spin-slow': 'spin 3s linear infinite', 
       }
     },
   },
   plugins: [
+    // פלאגין להוספת הצללות קשות (Hard Shadows) בסגנון קומיקס
     function ({ addUtilities }) {
-      const newUtilities = {
+      addUtilities({
         '.text-shadow-black': {
-          textShadow: '2px 2px 0px #000000',
+          'text-shadow': '2px 2px 0px #000000',
         },
         '.text-shadow-white': {
-          textShadow: '2px 2px 0px #ffffff',
+          'text-shadow': '2px 2px 0px #ffffff',
         },
-      }
-      addUtilities(newUtilities)
+      })
     }
   ],
 }
