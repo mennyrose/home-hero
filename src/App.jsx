@@ -7,7 +7,7 @@ import {
   BookOpen, Backpack, Guitar, Brush, Star, Check, CheckCircle,
   Clock, Loader2, AlertTriangle, RefreshCcw, RotateCcw, Minus, Plus, Trash2,
   Sun, Moon, Cloud, ShoppingBag, List, Menu, Utensils,
-  Wifi, WifiOff, Gamepad2, Sparkles, Shirt, Bath, Dog, Footprints
+  Wifi, WifiOff, Gamepad2, Sparkles, Shirt, Bath, Dog, Footprints, ThumbsUp
 } from 'lucide-react';
 
 // ==========================================
@@ -34,7 +34,6 @@ const AVATARS = {
   3: "./noam.png"
 };
 
-// מאגר האייקונים לבחירה
 const ICON_MAP = {
   bed: { icon: BedDouble, label: 'מיטה' },
   brush: { icon: Brush, label: 'צחצוח' },
@@ -56,7 +55,7 @@ const ICON_MAP = {
 // ==========================================
 const ADMIN_EMAILS = ["mennyr@gmail.com", "reulita10@gmail.com"];
 
-// --- קונפיגורציה ידנית לשימוש ב-GitHub/Localhost ---
+// הגדרות Firebase שהוטמעו מהבקשה שלך
 const MANUAL_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCpN2ExfgyJhWGhAZieXdo0G9-i3qVXPiw",
   authDomain: "homehero-f43e7.firebaseapp.com",
@@ -70,41 +69,32 @@ const MANUAL_FIREBASE_CONFIG = {
 // --- אתחול Firebase ---
 let firebaseConfig = null;
 let app, auth, db;
-let appId = 'family-game-v1'; // מזהה קבוע לאפליקציה בחוץ
+let appId = 'family-game-v1'; 
 
 try {
-  // 1. בדיקה אם אנחנו בקאנבס (אוטומטי)
-  if (typeof __firebase_config !== 'undefined') {
-    firebaseConfig = JSON.parse(__firebase_config);
-    if (typeof __app_id !== 'undefined') appId = __app_id;
-  } 
-  // 2. אחרת, נסה להשתמש בקונפיגורציה הידנית
-  else if (MANUAL_FIREBASE_CONFIG.apiKey !== "PASTE_API_KEY_HERE") {
-    firebaseConfig = MANUAL_FIREBASE_CONFIG;
-  }
+  // עדיפות לקונפיגורציה הידנית כדי להבטיח חיבור לפרויקט שלך
+  firebaseConfig = MANUAL_FIREBASE_CONFIG;
 
-  // אתחול בפועל
   if (firebaseConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } else {
-    console.warn("Firebase config missing. Fill MANUAL_FIREBASE_CONFIG in the code.");
+    console.warn("Firebase config missing.");
   }
 } catch (e) {
   console.error("Firebase init error:", e);
 }
 
-// תיקון: הוספת 'main' בסוף הנתיב כדי שיהיה הפניה למסמך תקין (6 חלקים)
+// שימוש ב-db רק אם הוא אותחל
+// שימו לב: הוספתי 'main' בסוף הנתיב כדי ליצור נתיב תקין למסמך (מספר זוגי של סגמנטים)
 const MAIN_DOC_REF = db ? doc(db, 'artifacts', appId, 'public', 'data', 'family', 'main') : null;
 
-// Fallback לאייקון אם לא נבחר ידנית
 const getIconComponent = (iconKey, title) => {
   if (iconKey && ICON_MAP[iconKey]) {
       const Icon = ICON_MAP[iconKey].icon;
       return <Icon size={32} />;
   }
-  // Fallback לפי טקסט (תמיכה לאחור)
   if (title.includes("מיטה")) return <BedDouble size={32} />;
   if (title.includes("שיניים")) return <Brush size={32} />;
   return <Star size={32} />;
@@ -138,7 +128,6 @@ const INITIAL_DATA = {
 // ==========================================
 
 const MainTitle = () => (
-  // תיקון: הסרת הטיה ויישור למרכז ללא חפיפה
   <div className="relative z-20 transform -rotate-2 mb-2">
     <div className={`absolute inset-0 bg-yellow-400 transform skew-x-12 scale-110 ${COMIC_BORDER} ${COMIC_SHADOW}`}></div>
     <h1 className="relative text-2xl md:text-5xl font-black text-black px-4 md:px-6 py-2 uppercase tracking-tighter text-center whitespace-nowrap" style={{ textShadow: "2px 2px 0 #fff" }}>
@@ -188,6 +177,15 @@ const Confetti = ({ active }) => {
     </div>
   );
 };
+
+const Toast = ({ message }) => (
+  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] animate-in zoom-in fade-in duration-300">
+    <div className={`bg-white px-6 py-4 rounded-2xl ${COMIC_BORDER} shadow-[8px_8px_0_0_rgba(0,0,0,1)] flex flex-col items-center gap-2`}>
+      <ThumbsUp size={48} className="text-green-500" />
+      <span className="text-2xl font-black text-black text-center whitespace-nowrap">{message}</span>
+    </div>
+  </div>
+);
 
 const ParentLogin = ({ onLogin }) => (
   <div className={`flex flex-col gap-4 p-6 bg-white rounded-xl ${COMIC_BORDER} ${COMIC_SHADOW} text-center animate-in fade-in zoom-in duration-300 max-w-xs w-full`}>
@@ -250,6 +248,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState('tasks');
   const [showConfetti, setShowConfetti] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [status, setStatus] = useState('connecting');
@@ -257,13 +256,6 @@ export default function App() {
 
   // --- Auth & Data ---
   useEffect(() => {
-    if (!auth) {
-        setData(INITIAL_DATA);
-        setLoading(false);
-        setStatus('demo-mode');
-        return;
-    }
-
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -274,14 +266,12 @@ export default function App() {
       } catch (err) {
         console.error("Auth Error:", err);
         setStatus('error');
-        setErrorMsg(err.message);
+        setErrorMsg("שגיאת התחברות: " + err.message + ". וודא שאפשרת כניסה אנונימית ב-Firebase Console.");
       }
     };
-    initAuth();
+    if (auth) initAuth();
 
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
+    const unsub = auth ? onAuthStateChanged(auth, (u) => setUser(u)) : () => {};
     return () => unsub();
   }, []);
 
@@ -310,7 +300,7 @@ export default function App() {
     }, (err) => {
       console.error("Snapshot Error:", err);
       setStatus('error');
-      setErrorMsg(err.message);
+      setErrorMsg("שגיאת קריאת נתונים: " + err.message);
       setLoading(false);
     });
 
@@ -331,87 +321,100 @@ export default function App() {
 
   // --- Handlers ---
   const handleTaskAction = async (kidId, task, action = 'complete') => {
-    if (!db) { alert("מצב דמו - הפעולה לא נשמרת"); return; }
-    const newData = { ...data };
-    const kid = newData.kids.find(k => k.id === kidId);
-    if (!kid) return;
+    if (!db) { alert("שגיאה: אין חיבור למסד נתונים"); return; }
     
-    if (action === 'complete') {
-        const t = kid.tasks.find(t => t.id === task.id);
-        const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
-        const points = isDouble ? t.value * 2 : t.value;
+    try {
+        const newData = { ...data };
+        const kid = newData.kids.find(k => k.id === kidId);
+        if (!kid) return;
+        
+        if (action === 'complete') {
+            const t = kid.tasks.find(t => t.id === task.id);
+            const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
+            const points = isDouble ? t.value * 2 : t.value;
 
-        if (kid.ageGroup === 'toddler') {
-            kid.points += points;
-            kid.lifetimePoints += points;
-            newData.bossHP = Math.max(0, newData.bossHP - points);
-            t.status = 'done';
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 2000);
-        } else {
-            t.status = 'pending_approval';
+            if (kid.ageGroup === 'toddler') {
+                kid.points += points;
+                kid.lifetimePoints += points;
+                newData.bossHP = Math.max(0, newData.bossHP - points);
+                t.status = 'done';
+                setShowConfetti(true);
+                setTimeout(() => setShowConfetti(false), 2000);
+            } else {
+                t.status = 'pending_approval';
+                setToastMsg("נשלח לאישור הורים!");
+                setTimeout(() => setToastMsg(null), 2500);
+            }
         }
+        if (action === 'buy_double' && kid.points >= 100) {
+            kid.points -= 100;
+            kid.activeEffects.doublePointsUntil = Date.now() + 3600000;
+        }
+        if (action === 'buy_shield' && kid.points >= 150) {
+            kid.points -= 150;
+            kid.inventory.shields++;
+        }
+        await updateDoc(MAIN_DOC_REF, newData);
+    } catch (err) {
+        console.error("Update Error:", err);
+        alert("שגיאה בשמירת הפעולה: " + err.message);
     }
-    if (action === 'buy_double' && kid.points >= 100) {
-        kid.points -= 100;
-        kid.activeEffects.doublePointsUntil = Date.now() + 3600000;
-    }
-    if (action === 'buy_shield' && kid.points >= 150) {
-        kid.points -= 150;
-        kid.inventory.shields++;
-    }
-    await updateDoc(MAIN_DOC_REF, newData);
   };
 
   const handleAdminAction = async (action, payload) => {
     if (!db) return;
-    const newData = { ...data };
-    if (action === 'approve') {
-        const { kidId, taskId } = payload;
-        const kid = newData.kids.find(k => k.id === kidId);
-        const t = kid.tasks.find(t => t.id === taskId);
-        if (!t) return;
-        const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
-        const points = isDouble ? t.value * 2 : t.value;
-        kid.points += points;
-        kid.lifetimePoints += points;
-        newData.bossHP = Math.max(0, newData.bossHP - points);
-        if (t.isOneTime) kid.tasks = kid.tasks.filter(task => task.id !== taskId);
-        else t.status = 'done';
-    } 
-    else if (action === 'add_task') {
-        const kid = newData.kids.find(k => k.id === parseInt(payload.targetKidId));
-        if (kid) kid.tasks.push(payload.task);
-    } 
-    else if (action === 'reset_boss') newData.bossHP = newData.maxBossHP;
-    else if (action === 'set_time') newData.currentTimePhase = payload;
-    else if (action === 'set_day') newData.currentDay = payload;
-    else if (action === 'sync_real_time') {
-        const now = getRealTimeStatus();
-        newData.currentDay = now.currentDay;
-        newData.currentTimePhase = now.currentTimePhase;
-    }
-    else if (action === 'manage_points') {
-        const { kidId, amount, mode } = payload;
-        const kid = newData.kids.find(k => k.id === kidId);
-        if (kid) {
-            if (mode === 'reset') kid.points = 0;
-            if (mode === 'add') kid.points += amount;
-            if (mode === 'subtract') kid.points = Math.max(0, kid.points - amount);
+    try {
+        const newData = { ...data };
+        if (action === 'approve') {
+            const { kidId, taskId } = payload;
+            const kid = newData.kids.find(k => k.id === kidId);
+            const t = kid.tasks.find(t => t.id === taskId);
+            if (!t) return;
+            const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
+            const points = isDouble ? t.value * 2 : t.value;
+            kid.points += points;
+            kid.lifetimePoints += points;
+            newData.bossHP = Math.max(0, newData.bossHP - points);
+            if (t.isOneTime) kid.tasks = kid.tasks.filter(task => task.id !== taskId);
+            else t.status = 'done';
+        } 
+        else if (action === 'add_task') {
+            const kid = newData.kids.find(k => k.id === parseInt(payload.targetKidId));
+            if (kid) kid.tasks.push(payload.task);
+        } 
+        else if (action === 'reset_boss') newData.bossHP = newData.maxBossHP;
+        else if (action === 'set_time') newData.currentTimePhase = payload;
+        else if (action === 'set_day') newData.currentDay = payload;
+        else if (action === 'sync_real_time') {
+            const now = getRealTimeStatus();
+            newData.currentDay = now.currentDay;
+            newData.currentTimePhase = now.currentTimePhase;
         }
+        else if (action === 'manage_points') {
+            const { kidId, amount, mode } = payload;
+            const kid = newData.kids.find(k => k.id === kidId);
+            if (kid) {
+                if (mode === 'reset') kid.points = 0;
+                if (mode === 'add') kid.points += amount;
+                if (mode === 'subtract') kid.points = Math.max(0, kid.points - amount);
+            }
+        }
+        else if (action === 'reset_task') {
+            const { kidId, taskId } = payload;
+            const kid = newData.kids.find(k => k.id === kidId);
+            const t = kid.tasks.find(t => t.id === taskId);
+            if (t) t.status = 'open';
+        }
+        else if (action === 'delete_task') {
+            const { kidId, taskId } = payload;
+            const kid = newData.kids.find(k => k.id === kidId);
+            if (kid) kid.tasks = kid.tasks.filter(t => t.id !== taskId);
+        }
+        await updateDoc(MAIN_DOC_REF, newData);
+    } catch (err) {
+        console.error("Admin Action Error:", err);
+        alert("שגיאה בפעולת ניהול: " + err.message);
     }
-    else if (action === 'reset_task') {
-        const { kidId, taskId } = payload;
-        const kid = newData.kids.find(k => k.id === kidId);
-        const t = kid.tasks.find(t => t.id === taskId);
-        if (t) t.status = 'open';
-    }
-    else if (action === 'delete_task') {
-        const { kidId, taskId } = payload;
-        const kid = newData.kids.find(k => k.id === kidId);
-        if (kid) kid.tasks = kid.tasks.filter(t => t.id !== taskId);
-    }
-    await updateDoc(MAIN_DOC_REF, newData);
   };
 
   const handleParentLogin = async () => {
@@ -422,7 +425,11 @@ export default function App() {
 
   if (loading) return <div className="flex flex-col items-center justify-center min-h-screen"><Loader2 className="w-12 h-12 animate-spin text-blue-500" /></div>;
 
-  if (status === 'error') return <div className="text-center p-10 text-red-600 font-bold">שגיאה: {errorMsg}</div>;
+  if (status === 'error') return <div className="text-center p-10 text-red-600 font-bold" dir="rtl">
+      <h2 className="text-2xl mb-2">אופס! שגיאה בחיבור</h2>
+      <p>{errorMsg}</p>
+      <p className="text-sm mt-4 text-gray-500">ודא שהגדרת Anonymous Auth ב-Firebase Console.</p>
+  </div>;
 
   // --- תצוגת הורים (Admin) ---
   if (user && !user.isAnonymous && ADMIN_EMAILS.includes(user.email)) {
@@ -453,6 +460,7 @@ export default function App() {
       
       <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
       {showConfetti && <div className="fixed inset-0 z-50 pointer-events-none"><Confetti active={true}/></div>}
+      {toastMsg && <Toast message={toastMsg} />}
 
       {/* HEADER */}
       <header className="relative z-20 p-2">
@@ -468,12 +476,10 @@ export default function App() {
            </div>
         </div>
         
-        {/* תיקון: ריווח בין כותרת למדדים כדי למנוע חפיפה */}
         <div className="flex justify-between items-end gap-4 mt-4">
            <div className="flex-1 min-w-[30%]">
                <BossBar current={data.kids.reduce((a,b)=>a+b.points,0)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
            </div>
-           {/* הכותרת ללא margin שלילי ובמרכז */}
            <div className="flex-none z-30 mx-2">
                <MainTitle />
            </div>
@@ -487,8 +493,7 @@ export default function App() {
       {activeTab === 'tasks' && (
       <div className="flex-1 relative z-30 px-2 md:px-4 pb-4 mt-44 md:mt-56 overflow-visible">
         
-        {/* Layer 1: Names (Z-50) - מעל הדמויות */}
-        {/* הורדנו את הבועות שיהיו בגובה המותניים */}
+        {/* Layer 1: Names (Z-50) */}
         <div className="grid grid-cols-3 gap-0 absolute top-[-30px] md:top-[-40px] left-2 md:left-4 right-2 md:right-4 z-50 pointer-events-none">
             {/* NOAM NAME */}
             <div className="relative h-20 flex flex-col justify-end px-2">
@@ -504,8 +509,7 @@ export default function App() {
             </div>
         </div>
 
-        {/* Layer 2: Characters (Z-40) - מתחת לשמות, מעל הגריד. מוצמדים לשמאל ומוגדלים פי 1.3 */}
-        {/* דמויות מוצמדות לתחתית האבסולוטית של הרווח העליון, כלומר על הקו של הלוחות */}
+        {/* Layer 2: Characters (Z-40) */}
         <div className="grid grid-cols-3 gap-0 absolute top-[-50px] md:top-[-70px] left-2 md:left-4 right-2 md:right-4 z-40 pointer-events-none">
             {/* NOAM - LEFT */}
             <div className="relative h-20 flex justify-start pl-4 items-end">
@@ -516,14 +520,12 @@ export default function App() {
                 <img src={AVATARS[2]} className="w-52 md:w-64 h-auto object-contain z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-[1.3] origin-bottom-left" alt="Roni" />
             </div>
             {/* ITAMAR - RIGHT */}
-            {/* תיקון: הזזת איתמר למרכז/צד ימין כדי למנוע חפיפה עם רוני */}
             <div className="relative h-20 flex justify-center items-end"> 
-                {/* Removed pl-4, changed justify-start to justify-center. Changed origin to bottom for safe centered flipping */}
                 <img src={AVATARS[1]} className="w-56 md:w-72 h-auto object-contain z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-x-[-1.3] scale-y-[1.3] origin-bottom" alt="Itamar" />
             </div>
         </div>
 
-        {/* Layer 3: Main Grid Content (Z-30) - מתחת להכל */}
+        {/* Layer 3: Main Grid Content (Z-30) */}
         <div className="grid grid-cols-3 h-full gap-0 border-4 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)] relative z-30 pt-10">
             
             {/* NOAM COLUMN */}
