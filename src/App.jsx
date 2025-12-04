@@ -35,24 +35,34 @@ const AVATARS = {
   3: "./noam.png"
 };
 
-// Custom Toothbrush Icon
+// --- Custom Icons ---
+
+// מברשת, משחה ושיניים
 const ToothbrushIcon = ({ size = 24, className }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M2 12h1c1 0 1 .5 1 1v4c0 1 1 2 2 2h2c1 0 2-1 2-2v-3c0-1.5 2-2 2-4 0-1.5-1-3-3-3s-2.5 1-2.5 1" />
-    <path d="M12 5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z" />
-    <line x1="12" y1="5" x2="18" y2="5" />
-    <line x1="12" y1="7" x2="18" y2="7" />
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Tooth */}
+    <path d="M4.5 9c0-1.5 1-2.5 2.5-2.5S9 7 9 8.5c0 1.5-1 2.5-1 4s.5 2.5 1.5 3 2 1 2 3v2a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1v-2c0-2 1-2.5 2-3s-1.5-1.5-1.5-3z" />
+    {/* Brush Handle */}
+    <path d="M12 18l7 3" />
+    <path d="M11 14l8 4" />
+    {/* Brush Head & Paste */}
+    <rect x="10" y="13" width="6" height="4" rx="1" transform="rotate(-25 13 15)" />
+    <path d="M10 12c.5-1 1.5-1.5 2.5-1s2 2 3 2" strokeDasharray="2 2" /> 
+  </svg>
+);
+
+// קוביות / לגו
+const ToyIcon = ({ size = 24, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Bottom Block */}
+    <rect x="4" y="14" width="10" height="8" rx="1" />
+    <line x1="9" y1="14" x2="9" y2="22" />
+    {/* Top Block */}
+    <rect x="10" y="6" width="10" height="8" rx="1" />
+    <line x1="15" y1="6" x2="15" y2="14" />
+    {/* Studs */}
+    <path d="M11 6V4h2v2" />
+    <path d="M17 6V4h2v2" />
   </svg>
 );
 
@@ -79,7 +89,7 @@ const ICON_MAP = {
   food: { icon: Utensils, label: 'אוכל' },
   dishwasher: { icon: DishwasherIcon, label: 'מדיח' },
   dinner: { icon: DinnerTimeIcon, label: 'ארוחה בזמן' },
-  toy: { icon: Gamepad2, label: 'צעצועים' },
+  toy: { icon: ToyIcon, label: 'צעצועים' }, // Updated to ToyIcon
   clean: { icon: Sparkles, label: 'ניקיון' },
   clothes: { icon: Shirt, label: 'בגדים' },
   bath: { icon: Bath, label: 'מקלחת' },
@@ -373,18 +383,10 @@ export default function App() {
             const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
             const points = isDouble ? t.value * 2 : t.value;
 
-            if (kid.ageGroup === 'toddler') {
-                kid.points += points;
-                kid.lifetimePoints += points;
-                newData.bossHP = Math.max(0, newData.bossHP - points);
-                t.status = 'done';
-                setShowConfetti(true);
-                setTimeout(() => setShowConfetti(false), 2000);
-            } else {
-                t.status = 'pending_approval';
-                setToastMsg("נשלח לאישור הורים!");
-                setTimeout(() => setToastMsg(null), 2500);
-            }
+            // עדכון: גם לפעוטות (נועם) המשימה עוברת לאישור הורים
+            t.status = 'pending_approval';
+            setToastMsg("נשלח לאישור הורים!");
+            setTimeout(() => setToastMsg(null), 2500);
         }
         if (action === 'buy_double' && kid.points >= 100) {
             kid.points -= 100;
