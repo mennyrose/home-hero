@@ -56,28 +56,41 @@ const ICON_MAP = {
 // ==========================================
 const ADMIN_EMAILS = ["mennyr@gmail.com", "reulita10@gmail.com"];
 
-// --- תיקון: בדיקה בטוחה של הקונפיגורציה ---
+// --- קונפיגורציה ידנית לשימוש ב-GitHub/Localhost ---
+// הוטמעו הפרטים שסיפקת
+const MANUAL_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCpN2ExfgyJhWGhAZieXdo0G9-i3qVXPiw",
+  authDomain: "homehero-f43e7.firebaseapp.com",
+  projectId: "homehero-f43e7",
+  storageBucket: "homehero-f43e7.firebasestorage.app",
+  messagingSenderId: "542278887454",
+  appId: "1:542278887454:web:60d2bdeb8e82e8d2c8260f",
+  measurementId: "G-Q10D5WT1YD"
+};
+
+// --- אתחול Firebase ---
 let firebaseConfig = null;
 let app, auth, db;
-let appId = 'default-app-id';
+let appId = 'family-game-v1'; // מזהה קבוע לאפליקציה בחוץ
 
 try {
-  // בדיקה האם אנחנו בסביבת Canvas (שם המשתנה מוזרק גלובלית)
+  // 1. בדיקה אם אנחנו בקאנבס (אוטומטי)
   if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
+    if (typeof __app_id !== 'undefined') appId = __app_id;
   } 
-  
-  if (typeof __app_id !== 'undefined') {
-    appId = __app_id;
+  // 2. אחרת, נסה להשתמש בקונפיגורציה הידנית (אם המשתמש מילא אותה)
+  else if (MANUAL_FIREBASE_CONFIG.apiKey !== "PASTE_API_KEY_HERE") {
+    firebaseConfig = MANUAL_FIREBASE_CONFIG;
   }
 
-  // אתחול Firebase רק אם יש קונפיגורציה
+  // אתחול בפועל
   if (firebaseConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } else {
-    console.warn("Firebase config not found. Running in offline/demo mode or waiting for config.");
+    console.warn("Firebase config missing. Fill MANUAL_FIREBASE_CONFIG in the code.");
   }
 } catch (e) {
   console.error("Firebase init error:", e);
