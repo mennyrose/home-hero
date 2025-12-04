@@ -57,7 +57,6 @@ const ICON_MAP = {
 const ADMIN_EMAILS = ["mennyr@gmail.com", "reulita10@gmail.com"];
 
 // --- קונפיגורציה ידנית לשימוש ב-GitHub/Localhost ---
-// הוטמעו הפרטים שסיפקת
 const MANUAL_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCpN2ExfgyJhWGhAZieXdo0G9-i3qVXPiw",
   authDomain: "homehero-f43e7.firebaseapp.com",
@@ -79,7 +78,7 @@ try {
     firebaseConfig = JSON.parse(__firebase_config);
     if (typeof __app_id !== 'undefined') appId = __app_id;
   } 
-  // 2. אחרת, נסה להשתמש בקונפיגורציה הידנית (אם המשתמש מילא אותה)
+  // 2. אחרת, נסה להשתמש בקונפיגורציה הידנית
   else if (MANUAL_FIREBASE_CONFIG.apiKey !== "PASTE_API_KEY_HERE") {
     firebaseConfig = MANUAL_FIREBASE_CONFIG;
   }
@@ -96,9 +95,8 @@ try {
   console.error("Firebase init error:", e);
 }
 
-// נתיב תקין לפי חוקי המערכת (artifacts/appId/public/data/family)
-// שימוש ב-db רק אם הוא אותחל
-const MAIN_DOC_REF = db ? doc(db, 'artifacts', appId, 'public', 'data', 'family') : null;
+// תיקון: הוספת 'main' בסוף הנתיב כדי שיהיה הפניה למסמך תקין (6 חלקים)
+const MAIN_DOC_REF = db ? doc(db, 'artifacts', appId, 'public', 'data', 'family', 'main') : null;
 
 // Fallback לאייקון אם לא נבחר ידנית
 const getIconComponent = (iconKey, title) => {
