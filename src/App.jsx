@@ -152,20 +152,14 @@ const getIconComponent = (iconKey, title) => {
 const DAYS_HEBREW = { sunday: 'ראשון', monday: 'שני', tuesday: 'שלישי', wednesday: 'רביעי', thursday: 'חמישי', friday: 'שישי', saturday: 'שבת' };
 const TIME_HEBREW = { morning: 'בוקר', noon: 'צהריים', evening: 'ערב' };
 
-// פונקציית זמן מעודכנת לשעון ישראל
 const getRealTimeStatus = () => {
-  // יצירת תאריך נוכחי
   const now = new Date();
-  
-  // המרה לשעון ישראל כדי לקבל יום ושעה נכונים
   const options = { timeZone: 'Asia/Jerusalem', hour12: false, weekday: 'long', hour: 'numeric' };
   const formatter = new Intl.DateTimeFormat('en-US', options);
   const parts = formatter.formatToParts(now);
-  
   const dayName = parts.find(p => p.type === 'weekday').value.toLowerCase();
   const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
 
-  // מיפוי ימים ומצבי יום
   const daysMap = {
       'sunday': 'sunday', 'monday': 'monday', 'tuesday': 'tuesday', 
       'wednesday': 'wednesday', 'thursday': 'thursday', 'friday': 'friday', 'saturday': 'saturday'
@@ -180,12 +174,13 @@ const getRealTimeStatus = () => {
 
 const realTime = getRealTimeStatus();
 
+// Added familyPoints to track pizza progress separately if needed
 const INITIAL_DATA = { 
   familyGoal: 350, bossHP: 500, maxBossHP: 500, currentDay: realTime.currentDay, currentTimePhase: realTime.currentTimePhase,
   kids: [
-    { id: 1, name: "איתמר", ageGroup: "big", color: "bg-cyan-400", lightColor: "bg-cyan-100", points: 120, lifetimePoints: 1500, inventory: { shields: 2 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
-    { id: 2, name: "רוני", ageGroup: "big", color: "bg-purple-400", lightColor: "bg-purple-100", points: 90, lifetimePoints: 800, inventory: { shields: 0 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
-    { id: 3, name: "נועם", ageGroup: "toddler", color: "bg-orange-400", lightColor: "bg-orange-100", points: 40, lifetimePoints: 200, inventory: { shields: 0 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] }
+    { id: 1, name: "איתמר", ageGroup: "big", color: "bg-cyan-400", lightColor: "bg-cyan-100", points: 120, lifetimePoints: 1500, familyPoints: 120, inventory: { shields: 2 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
+    { id: 2, name: "רוני", ageGroup: "big", color: "bg-purple-400", lightColor: "bg-purple-100", points: 90, lifetimePoints: 800, familyPoints: 90, inventory: { shields: 0 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
+    { id: 3, name: "נועם", ageGroup: "toddler", color: "bg-orange-400", lightColor: "bg-orange-100", points: 40, lifetimePoints: 200, familyPoints: 40, inventory: { shields: 0 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] }
   ]
 };
 
@@ -351,7 +346,13 @@ export default function App() {
     
     const unsubSnap = onSnapshot(docRef, async (snap) => {
       if (snap.exists()) {
-        setData(snap.data());
+        const serverData = snap.data();
+        // Migration for familyPoints if missing
+        if (serverData.kids && serverData.kids[0] && serverData.kids[0].familyPoints === undefined) {
+            serverData.kids = serverData.kids.map(k => ({ ...k, familyPoints: k.points }));
+            updateDoc(MAIN_DOC_REF, { kids: serverData.kids });
+        }
+        setData(serverData);
         setStatus('connected');
       } else {
         try { 
@@ -374,7 +375,7 @@ export default function App() {
     return () => unsubSnap();
   }, [user]);
 
-  // Time Auto-Update - runs every minute AND on initial load if data is stale
+  // Time Auto-Update
   useEffect(() => {
     if (!data || !db) return;
 
@@ -386,9 +387,7 @@ export default function App() {
         }
     };
 
-    // Run immediately to fix stale data from previous sessions
     checkTime();
-
     const interval = setInterval(checkTime, 60000);
     return () => clearInterval(interval);
   }, [data]);
@@ -404,10 +403,7 @@ export default function App() {
         
         if (action === 'complete') {
             const t = kid.tasks.find(t => t.id === task.id);
-            const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
-            const points = isDouble ? t.value * 2 : t.value;
-
-            // עדכון: כולם עוברים לאישור הורים, כולל נועם
+            // Always move to pending for parents to approve effects
             t.status = 'pending_approval';
             setToastMsg("נשלח לאישור הורים!");
             setTimeout(() => setToastMsg(null), 2500);
@@ -438,9 +434,23 @@ export default function App() {
             if (!t) return;
             const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
             const points = isDouble ? t.value * 2 : t.value;
+            
+            // Logic for Impact
+            const impact = t.impact || 'boss'; // Default to boss if old task
+            
+            // 1. Always give currency points
             kid.points += points;
             kid.lifetimePoints += points;
-            newData.bossHP = Math.max(0, newData.bossHP - points);
+
+            // 2. Logic based on impact type
+            if (impact === 'boss') {
+                newData.bossHP = Math.max(0, newData.bossHP - points);
+                kid.familyPoints = (kid.familyPoints || 0) + points; // Usually boss damage helps family? Assuming yes.
+            } else if (impact === 'pizza') {
+                kid.familyPoints = (kid.familyPoints || 0) + points; // Adds to pizza bar
+            } 
+            // if impact === 'none', we don't reduce bossHP and don't add to familyPoints (Pizza)
+
             if (t.isOneTime) kid.tasks = kid.tasks.filter(task => task.id !== taskId);
             else t.status = 'done';
         } 
@@ -451,6 +461,12 @@ export default function App() {
             setTimeout(() => setToastMsg(null), 2500);
         } 
         else if (action === 'reset_boss') newData.bossHP = newData.maxBossHP;
+        else if (action === 'reset_all') {
+             // Reset to initial state but keep time
+             Object.assign(newData, INITIAL_DATA);
+             newData.currentDay = data.currentDay;
+             newData.currentTimePhase = data.currentTimePhase;
+        }
         else if (action === 'set_time') newData.currentTimePhase = payload;
         else if (action === 'set_day') newData.currentDay = payload;
         else if (action === 'sync_real_time') {
@@ -547,7 +563,8 @@ export default function App() {
         
         <div className="flex justify-between items-end gap-4 mt-4">
            <div className="flex-1 min-w-[30%]">
-               <BossBar current={data.kids.reduce((a,b)=>a+b.points,0)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
+               {/* Updated to use familyPoints for Pizza progress */}
+               <BossBar current={data.kids.reduce((a,b)=>a+(b.familyPoints || b.points),0)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
            </div>
            <div className="flex-none z-30 mx-2">
                <MainTitle />
@@ -600,7 +617,6 @@ export default function App() {
             {/* NOAM COLUMN */}
             <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-pink-100 overflow-visible">
                <div className="flex-1 flex flex-col items-center justify-start relative z-20 w-full gap-4 mt-4">
-                  {/* תיקון: סינון לפי status === 'open' גם לנועם כדי שמשימות ייעלמו בלחיצה */}
                   {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open').map(task => (
                      <BigRedButton 
                         key={task.id} 
@@ -716,7 +732,8 @@ const ShopView = ({ kids, onBuy }) => (
 // --- Admin Panel Content ---
 const AdminPanelContent = ({ data, onAction }) => {
   const [newTask, setNewTask] = useState({ 
-      title: '', value: 10, time: data.currentTimePhase, isOneTime: false, targetKidId: data.kids[0]?.id, days: [data.currentDay], icon: 'star'
+      title: '', value: 10, time: data.currentTimePhase, isOneTime: false, targetKidId: data.kids[0]?.id, days: [data.currentDay], icon: 'star',
+      impact: 'boss' // Default
   });
   const [pointsManager, setPointsManager] = useState({ kidId: data.kids[0]?.id, amount: 10 });
   const [selectedKidForView, setSelectedKidForView] = useState(data.kids[0]?.id);
@@ -791,6 +808,24 @@ const AdminPanelContent = ({ data, onAction }) => {
                 </div>
             </div>
 
+            <div className="col-span-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <label className="block text-xs font-bold text-blue-800 mb-2">השפעת המשימה</label>
+                <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="impact" value="boss" checked={newTask.impact === 'boss'} onChange={() => setNewTask({...newTask, impact: 'boss'})} className="text-blue-600" />
+                        <span className="text-sm">מפלצת הבלאגן</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="impact" value="pizza" checked={newTask.impact === 'pizza'} onChange={() => setNewTask({...newTask, impact: 'pizza'})} className="text-blue-600" />
+                        <span className="text-sm">פיצה משפחתית</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="impact" value="none" checked={newTask.impact === 'none'} onChange={() => setNewTask({...newTask, impact: 'none'})} className="text-blue-600" />
+                        <span className="text-sm">ללא השפעה</span>
+                    </label>
+                </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-blue-800 mb-1">עבור ילד</label>
               <select className="w-full p-2 rounded-lg border border-blue-200" value={newTask.targetKidId} onChange={e => setNewTask({...newTask, targetKidId: e.target.value})}>
@@ -833,7 +868,8 @@ const AdminPanelContent = ({ data, onAction }) => {
                     status: 'open',
                     isOneTime: newTask.isOneTime,
                     days: newTask.days,
-                    icon: newTask.icon
+                    icon: newTask.icon,
+                    impact: newTask.impact
                   }
                 });
                 setNewTask(prev => ({ ...prev, title: '' }));
@@ -902,6 +938,22 @@ const AdminPanelContent = ({ data, onAction }) => {
             </select>
             <button onClick={() => onAction('reset_boss')} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-200 text-sm ml-auto">איפוס בוס</button>
           </div>
+      </section>
+
+      <section className="bg-red-50 p-6 rounded-xl shadow-sm border border-red-200 mt-8">
+          <h3 className="text-sm font-bold text-red-600 uppercase mb-4 tracking-wider border-b border-red-200 pb-2">אזור סכנה</h3>
+          <p className="text-xs text-red-500 mb-4">פעולה זו תמחק את כל הניקוד, המשימות וההתקדמות ותחזיר את המערכת למצב התחלתי.</p>
+          <button 
+            onClick={() => {
+                if(window.confirm('האם אתה בטוח? פעולה זו תאפס את כל הנתונים, הניקוד והמשימות לכולם! לא ניתן לשחזר.')) {
+                    onAction('reset_all');
+                }
+            }} 
+            className="w-full bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 shadow-md flex items-center justify-center gap-2"
+          >
+            <AlertTriangle size={20} />
+            איפוס מערכת מלא
+          </button>
       </section>
     </div>
   );
