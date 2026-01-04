@@ -89,7 +89,7 @@ const ICON_MAP = {
   food: { icon: Utensils, label: 'אוכל' },
   dishwasher: { icon: DishwasherIcon, label: 'מדיח' },
   dinner: { icon: DinnerTimeIcon, label: 'ארוחה בזמן' },
-  toy: { icon: ToyIcon, label: 'צעצועים' }, // Updated to ToyIcon
+  toy: { icon: ToyIcon, label: 'צעצועים' }, 
   clean: { icon: Sparkles, label: 'ניקיון' },
   clothes: { icon: Shirt, label: 'בגדים' },
   bath: { icon: Bath, label: 'מקלחת' },
@@ -152,15 +152,32 @@ const getIconComponent = (iconKey, title) => {
 const DAYS_HEBREW = { sunday: 'ראשון', monday: 'שני', tuesday: 'שלישי', wednesday: 'רביעי', thursday: 'חמישי', friday: 'שישי', saturday: 'שבת' };
 const TIME_HEBREW = { morning: 'בוקר', noon: 'צהריים', evening: 'ערב' };
 
+// פונקציית זמן מעודכנת לשעון ישראל
 const getRealTimeStatus = () => {
+  // יצירת תאריך נוכחי
   const now = new Date();
-  const hour = now.getHours();
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  
+  // המרה לשעון ישראל כדי לקבל יום ושעה נכונים
+  const options = { timeZone: 'Asia/Jerusalem', hour12: false, weekday: 'long', hour: 'numeric' };
+  const formatter = new Intl.DateTimeFormat('en-US', options);
+  const parts = formatter.formatToParts(now);
+  
+  const dayName = parts.find(p => p.type === 'weekday').value.toLowerCase();
+  const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
+
+  // מיפוי ימים ומצבי יום
+  const daysMap = {
+      'sunday': 'sunday', 'monday': 'monday', 'tuesday': 'tuesday', 
+      'wednesday': 'wednesday', 'thursday': 'thursday', 'friday': 'friday', 'saturday': 'saturday'
+  };
+  
   let phase = 'morning';
   if (hour >= 12 && hour < 17) phase = 'noon';
   if (hour >= 17 || hour < 6) phase = 'evening';
-  return { currentDay: days[now.getDay()], currentTimePhase: phase };
+
+  return { currentDay: daysMap[dayName] || 'sunday', currentTimePhase: phase };
 };
+
 const realTime = getRealTimeStatus();
 
 const INITIAL_DATA = { 
@@ -357,15 +374,22 @@ export default function App() {
     return () => unsubSnap();
   }, [user]);
 
-  // Time Auto-Update
+  // Time Auto-Update - runs every minute AND on initial load if data is stale
   useEffect(() => {
     if (!data || !db) return;
-    const interval = setInterval(() => {
-      const now = getRealTimeStatus();
-      if (now.currentDay !== data.currentDay || now.currentTimePhase !== data.currentTimePhase) {
-        updateDoc(MAIN_DOC_REF, now).catch(console.error);
-      }
-    }, 60000);
+
+    const checkTime = () => {
+        const now = getRealTimeStatus();
+        if (now.currentDay !== data.currentDay || now.currentTimePhase !== data.currentTimePhase) {
+            console.log("Updating time:", now);
+            updateDoc(MAIN_DOC_REF, now).catch(console.error);
+        }
+    };
+
+    // Run immediately to fix stale data from previous sessions
+    checkTime();
+
+    const interval = setInterval(checkTime, 60000);
     return () => clearInterval(interval);
   }, [data]);
 
@@ -383,7 +407,7 @@ export default function App() {
             const isDouble = kid.activeEffects?.doublePointsUntil > Date.now();
             const points = isDouble ? t.value * 2 : t.value;
 
-            // עדכון: גם לפעוטות (נועם) המשימה עוברת לאישור הורים
+            // עדכון: כולם עוברים לאישור הורים, כולל נועם
             t.status = 'pending_approval';
             setToastMsg("נשלח לאישור הורים!");
             setTimeout(() => setToastMsg(null), 2500);
@@ -576,7 +600,8 @@ export default function App() {
             {/* NOAM COLUMN */}
             <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-pink-100 overflow-visible">
                <div className="flex-1 flex flex-col items-center justify-start relative z-20 w-full gap-4 mt-4">
-                  {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase).map(task => (
+                  {/* תיקון: סינון לפי status === 'open' גם לנועם כדי שמשימות ייעלמו בלחיצה */}
+                  {data.kids[2].tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open').map(task => (
                      <BigRedButton 
                         key={task.id} 
                         label={task.title} 
