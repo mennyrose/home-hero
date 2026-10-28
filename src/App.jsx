@@ -318,9 +318,9 @@ const reopenDoneTasks = (d) => {
 // ==========================================
 
 const MainTitle = () => (
-  <div className="relative z-20 transform -rotate-2 mb-2">
+  <div className="relative z-20 transform -rotate-2">
     <div className={`absolute inset-0 bg-yellow-400 transform skew-x-12 scale-110 ${COMIC_BORDER} ${COMIC_SHADOW}`}></div>
-    <h1 className="relative text-2xl md:text-5xl font-black text-black px-4 md:px-6 py-2 uppercase tracking-tighter text-center whitespace-nowrap" style={{ textShadow: "2px 2px 0 #fff" }}>
+    <h1 className="relative text-xl md:text-3xl font-black text-black px-3 md:px-5 py-1uppercase tracking-tighter text-center whitespace-nowrap" style={{ textShadow: "2px 2px 0 #fff" }}>
       גיבורי הבית
     </h1>
   </div>
@@ -394,42 +394,49 @@ const ParentLogin = ({ onLogin }) => (
 );
 
 const BigRedButton = ({ onClick, label, iconKey, points }) => (
-  <button 
-    onClick={onClick}
-    className={`w-40 h-40 rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse`}
-  >
-    <div className="transform scale-150 mb-2 text-white drop-shadow-[2px_2px_0_#000]">
-        {getIconComponent(iconKey, label)}
-    </div>
-    <span className="text-xl font-black mt-1 leading-none text-center px-2 text-shadow-black">{label}</span>
-    <span className="text-sm font-bold bg-yellow-400 text-black px-2 rounded-full border border-black shadow-sm transform -rotate-3">{points} נק'</span>
-  </button>
-);
-
-const TaskItem = ({ title, points, iconKey, isDone, onClick }) => (
-  <div className="relative group mb-3 w-full">
-     <div className={`bg-white border-4 border-black p-2 rounded-xl flex items-center justify-between shadow-[4px_4px_0px_0px_#ccc] group-hover:shadow-[4px_4px_0px_0px_#000] transition-all`}>
-        <div className="flex items-center gap-2 overflow-hidden">
-           <div className={`p-2 rounded-lg border-2 border-black flex-shrink-0 bg-gray-50`}>
-              {getIconComponent(iconKey, title)}
-           </div>
-           <div className="min-w-0">
-              <div className="font-black text-base leading-tight truncate">{title}</div>
-              <div className="text-xs font-bold bg-yellow-300 inline-block px-1 border border-black mt-1">
-                {points} נק'
-              </div>
-           </div>
-        </div>
-        <button 
-          onClick={onClick}
-          className="w-10 h-10 border-4 border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ml-2"
-        >
-          {isDone && <Check size={24} strokeWidth={4} />}
-        </button>
-     </div>
+  <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+    <button 
+      onClick={onClick}
+      className={`h-full max-h-44 aspect-square rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse overflow-hidden`}
+    >
+      <div className="transform scale-110 mb-1 text-white drop-shadow-[2px_2px_0_#000]">
+          {getIconComponent(iconKey, label)}
+      </div>
+      <span className="text-[clamp(0.75rem,2.2vh,1.15rem)] font-black leading-tight text-center px-2 text-shadow-black">{label}</span>
+      <span className="text-xs font-bold bg-yellow-400 text-black px-2 rounded-full border border-black shadow-sm transform -rotate-3">{points} נק'</span>
+    </button>
   </div>
 );
 
+// dense: כשיש הרבה משימות בעמודה - שורה אחת קטנה לכל משימה כדי שהכל ייכנס בלי גלילה
+const TaskItem = ({ title, points, iconKey, isDone, onClick, dense }) => (
+  <div className={`flex-1 max-h-20 w-full ${dense ? 'min-h-0' : 'min-h-[2.75rem]'}`}>
+    <div className={`h-full bg-white border-black px-2 rounded-xl flex items-center justify-between gap-2 shadow-[3px_3px_0px_0px_#000] ${dense ? 'border-2' : 'border-4'}`}>
+      <div className="flex items-center gap-2 min-w-0 h-full py-1">
+        <div className="h-[80%] max-h-12 aspect-square p-0.5 rounded-lg border-2 border-black flex-shrink-0 bg-gray-50 flex items-center justify-center [&_svg]:w-full [&_svg]:h-full [&>div]:!w-full [&>div]:!h-full">
+          {getIconComponent(iconKey, title)}
+        </div>
+        {dense ? (
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="font-black text-xs leading-tight truncate">{title}</span>
+            <span className="text-[10px] font-bold bg-yellow-300 px-1 border border-black flex-shrink-0">{points}</span>
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <div className="font-black text-[clamp(0.8rem,2.1vh,1.05rem)] leading-tight line-clamp-2 break-words">{title}</div>
+            <div className="text-[11px] font-bold bg-yellow-300 inline-block px-1 border border-black">{points} נק'</div>
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onClick}
+        className={`h-[70%] max-h-10 aspect-square border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ${dense ? 'border-2' : 'border-4'}`}
+      >
+        {isDone && <Check size={20} strokeWidth={4} />}
+      </button>
+    </div>
+  </div>
+);
 
 // --- Bedtime (kiosk) ---
 const BedtimePanel = ({ data, now, onSleep }) => {
@@ -439,7 +446,7 @@ const BedtimePanel = ({ data, now, onSleep }) => {
   const rec = data.bedtime?.days?.[ev.dateKey] || {};
   if (rec.off) {
     return (
-      <div className={`w-full mt-3 relative z-20 bg-purple-200 p-3 rounded-xl text-center font-black ${COMIC_BORDER} ${COMIC_SHADOW_SM}`}>
+      <div className={`shrink-0 w-full mt-2 bg-purple-200 p-2 rounded-xl text-center text-sm font-black ${COMIC_BORDER} ${COMIC_SHADOW_SM}`}>
         🎉 מחר חופש! אין שעת שינה הערב
       </div>
     );
@@ -449,17 +456,19 @@ const BedtimePanel = ({ data, now, onSleep }) => {
   const over = bank.remaining < 0;
 
   return (
-    <div className="w-full mt-3 relative z-20 space-y-2">
-      <div className={`${over ? 'bg-red-500 text-white' : 'bg-yellow-300 text-black'} rounded-xl p-2 text-center ${COMIC_BORDER} ${COMIC_SHADOW_SM}`}>
-        <div className="text-xs font-black flex items-center justify-center gap-1"><Hourglass size={14} /> {over ? 'חריגה מהבנק השבועי' : 'נשאר לבזבז השבוע'}</div>
-        <div className="text-2xl font-black leading-tight">{formatDuration(bank.remaining)}</div>
+    <div className="shrink-0 w-full mt-2 space-y-1">
+      <div className="flex gap-2 items-stretch">
+        <div className={`flex-1 ${over ? 'bg-red-500 text-white' : 'bg-yellow-300 text-black'} rounded-xl px-1 py-1 text-center flex flex-col justify-center ${COMIC_BORDER} ${COMIC_SHADOW_SM}`}>
+          <div className="text-[10px] font-black flex items-center justify-center gap-1"><Hourglass size={12} /> {over ? 'חריגה מהבנק' : 'נשאר השבוע'}</div>
+          <div className="text-base font-black leading-tight">{formatDuration(bank.remaining)}</div>
+        </div>
+        <button onClick={onSleep} className={`flex-1 bg-indigo-600 text-white font-black text-sm leading-tight py-2 rounded-xl flex flex-col items-center justify-center gap-0.5 ${COMIC_BTN}`}>
+          <Moon size={18} /> איתמר הלך לישון
+        </button>
       </div>
-      <button onClick={onSleep} className={`w-full bg-indigo-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 ${COMIC_BTN}`}>
-        <Moon size={20} /> איתמר הלך לישון
-      </button>
       {rec.sleepAt && (
-        <div className="text-center text-xs font-black bg-white rounded-lg border-2 border-black px-2 py-1">
-          נרשם: {rec.sleepAt}. קם וחזר לישון? לחץ שוב
+        <div className="text-center text-[10px] font-black bg-white rounded border-2 border-black px-1">
+          נרשם {rec.sleepAt} · קם וחזר לישון? לחץ שוב
         </div>
       )}
     </div>
@@ -676,6 +685,11 @@ export default function App() {
                     if (!kid) return false;
                     kid.tasks = kid.tasks.filter(t => t.id !== payload.taskId);
                     break;
+                case 'edit_task':
+                    if (!task) return false;
+                    Object.assign(task, payload.fields); // הסטטוס וה-id נשארים
+                    msg = "המשימה עודכנה";
+                    break;
                 case 'add_task': {
                     // משימה אחת לכמה ילדים: כל ילד מקבל עותק נפרד עם סטטוס משלו
                     const targets = d.kids.filter(k => payload.kidIds.includes(k.id));
@@ -805,17 +819,23 @@ export default function App() {
   const openTasks = (kid) => kid.tasks.filter(t => t.time === data.currentTimePhase && t.status === 'open' && (t.days || []).includes(data.currentDay));
   const taskPoints = (kid, task) => (isDoubleActive(kid) ? task.value * 2 : task.value);
 
+  const COLUMNS = [
+    { kid: noam, bg: 'bg-pink-100', avatar: AVATARS[3], flip: false },
+    { kid: roni, bg: 'bg-purple-100', avatar: AVATARS[2], flip: false },
+    { kid: itamar, bg: 'bg-blue-100', avatar: AVATARS[1], flip: true }
+  ];
+
   return (
-    <div className="min-h-screen font-comic overflow-hidden flex flex-col relative" style={BG_STYLE}>
-      
+    <div className="h-[100dvh] font-comic overflow-hidden flex flex-col relative" style={BG_STYLE}>
+
       <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
       {toastMsg && <Toast message={toastMsg} />}
 
       {/* HEADER */}
-      <header className="relative z-20 p-2">
-        <div className="flex justify-between items-center mb-2">
+      <header className="relative z-20 px-2 pt-1 shrink-0">
+        <div className="flex justify-between items-center">
            <button onClick={() => setShowLoginModal(true)} className="opacity-50 hover:opacity-100 transition"><Settings className="text-white drop-shadow-md"/></button>
-           <div className={`bg-white px-3 py-1 rounded-full text-xs font-black text-black flex items-center gap-2 ${COMIC_BORDER} shadow-sm`}>
+           <div className={`bg-white px-3 py-0.5 rounded-full text-xs font-black text-black flex items-center gap-2 ${COMIC_BORDER} shadow-sm`}>
                 <span className="flex items-center gap-1">
                   {data.currentTimePhase === 'morning' ? <Sun size={14} className="text-orange-500"/> : data.currentTimePhase === 'noon' ? <Cloud size={14} className="text-blue-400"/> : <Moon size={14} className="text-indigo-600"/>}
                   {TIME_HEBREW[data.currentTimePhase]}
@@ -825,10 +845,9 @@ export default function App() {
                 {now.simulated && <span className="bg-yellow-300 px-2 rounded-full border border-black">מצב בדיקה</span>}
            </div>
         </div>
-        
-        <div className="flex justify-between items-end gap-4 mt-4">
+
+        <div className="flex justify-between items-end gap-4 mt-1">
            <div className="flex-1 min-w-[30%]">
-               {/* Updated to use familyPoints for Pizza progress */}
                <BossBar current={getPizza(data)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
            </div>
            <div className="flex-none z-30 mx-2">
@@ -840,99 +859,52 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN COMIC PANELS */}
+      {/* MAIN COMIC PANELS: עמודה לכל ילד, הכל בתוך המסך בלי גלילה */}
       {activeTab === 'tasks' && (
-      <div className="flex-1 relative z-30 px-2 md:px-4 pb-4 mt-44 md:mt-56 overflow-visible">
-        
-        {/* Layer 1: Names (Z-50) */}
-        <div className="grid grid-cols-3 gap-0 absolute top-[-30px] md:top-[-40px] left-2 md:left-4 right-2 md:right-4 z-50 pointer-events-none">
-            {/* NOAM NAME */}
-            <div className="relative h-20 flex flex-col justify-end px-2">
-                 <NameBubble name={noam.name} points={noam.points} />
-            </div>
-            {/* RONI NAME */}
-            <div className="relative h-20 flex flex-col justify-end px-2">
-                 <NameBubble name={roni.name} points={roni.points} />
-            </div>
-            {/* ITAMAR NAME */}
-            <div className="relative h-20 flex flex-col justify-end px-2">
-                 <NameBubble name={itamar.name} points={itamar.points} />
-            </div>
-        </div>
-
-        {/* Layer 2: Characters (Z-40) */}
-        <div className="grid grid-cols-3 gap-0 absolute top-[-50px] md:top-[-70px] left-2 md:left-4 right-2 md:right-4 z-40 pointer-events-none">
-            {/* NOAM - LEFT */}
-            <div className="relative h-20 flex justify-start pl-4 items-end">
-                <img src={AVATARS[3]} className="w-40 md:w-56 h-auto object-contain z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-[1.3] origin-bottom-left" alt="Noam" />
-            </div>
-            {/* RONI - CENTER */}
-            <div className="relative h-20 flex justify-start pl-4 items-end">
-                <img src={AVATARS[2]} className="w-52 md:w-64 h-auto object-contain z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-[1.3] origin-bottom-left" alt="Roni" />
-            </div>
-            {/* ITAMAR - RIGHT */}
-            <div className="relative h-20 flex justify-center items-end"> 
-                <img src={AVATARS[1]} className="w-56 md:w-72 h-auto object-contain z-20 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] transform scale-x-[-1.3] scale-y-[1.3] origin-bottom" alt="Itamar" />
-            </div>
-        </div>
-
-        {/* Layer 3: Main Grid Content (Z-30) */}
-        <div className="grid grid-cols-3 h-full gap-0 border-4 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)] relative z-30 pt-10">
-            
-            {/* NOAM COLUMN */}
-            <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-pink-100 overflow-visible">
-               <div className="flex-1 flex flex-col items-center justify-start relative z-20 w-full gap-4 mt-4">
-                  {openTasks(noam).map(task => (
-                     <BigRedButton 
-                        key={task.id} 
-                        label={task.title} 
-                        points={taskPoints(noam, task)}
-                        iconKey={task.icon} 
-                        onClick={() => handleTaskAction(3, task, 'complete')} 
-                     />
-                  ))}
-               </div>
-            </div>
-
-            {/* RONI COLUMN */}
-            <div className="relative border-l-4 border-black p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-purple-100 overflow-visible">
-               <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto mt-4">
-                  {openTasks(roni).map(task => (
-                     <TaskItem 
-                        key={task.id} 
-                        title={task.title} 
-                        points={taskPoints(roni, task)} 
-                        iconKey={task.icon} 
-                        onClick={() => handleTaskAction(2, task, 'complete')} 
-                     />
-                  ))}
-               </div>
-            </div>
-
-            {/* ITAMAR COLUMN */}
-            <div className="relative p-2 flex flex-col items-center bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] bg-blue-100 overflow-visible">
-               <div className="flex-1 w-full relative z-20 space-y-3 overflow-y-auto mt-4">
-                  {openTasks(itamar).map(task => (
-                     <TaskItem 
-                        key={task.id} 
-                        title={task.title} 
-                        points={taskPoints(itamar, task)} 
-                        iconKey={task.icon} 
-                        onClick={() => handleTaskAction(1, task, 'complete')} 
-                     />
-                  ))}
-               </div>
-               <BedtimePanel data={data} now={now} onSleep={handleSleepNow} />
-            </div>
-        </div>
-      </div>
+      <main className="flex-1 min-h-0 relative z-30 px-2 pt-1 pb-1 grid grid-cols-3 gap-2 md:gap-3">
+        {COLUMNS.map(({ kid, bg, avatar, flip }) => {
+          const tasks = openTasks(kid);
+          return (
+            <section key={kid.id} className="min-h-0 flex flex-col">
+              <div className="relative h-[22vh] shrink-0 flex justify-center items-end pointer-events-none z-10">
+                <img src={avatar} className={`h-full w-auto max-w-full object-contain object-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] ${flip ? '-scale-x-100' : ''}`} alt={kid.name} />
+              </div>
+              <div className="relative z-20 -mt-5 px-2 shrink-0">
+                <NameBubble name={kid.name} points={kid.points} />
+              </div>
+              <div className={`flex-1 min-h-0 relative z-10 border-4 border-black ${bg} bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] shadow-[6px_6px_0px_0px_rgba(0,0,0,0.5)] px-2 pt-3 pb-2 flex flex-col overflow-hidden`}>
+                <div className={`flex-1 min-h-0 flex flex-col ${tasks.length > 5 ? 'gap-1' : 'gap-2'}`}>
+                  {tasks.length === 0 && (
+                    <div className="flex-1 flex items-center justify-center text-center font-black text-slate-400">אין משימות כרגע 🎉</div>
+                  )}
+                  {kid.ageGroup === 'toddler'
+                    ? tasks.map(task => (
+                        <BigRedButton key={task.id} label={task.title} points={taskPoints(kid, task)} iconKey={task.icon} onClick={() => handleTaskAction(kid.id, task, 'complete')} />
+                      ))
+                    : tasks.map(task => (
+                        <TaskItem key={task.id} dense={tasks.length > 5} title={task.title} points={taskPoints(kid, task)} iconKey={task.icon} onClick={() => handleTaskAction(kid.id, task, 'complete')} />
+                      ))}
+                </div>
+                {kid.id === BED_KID_ID && <BedtimePanel data={data} now={now} onSleep={handleSleepNow} />}
+              </div>
+            </section>
+          );
+        })}
+      </main>
       )}
 
       {activeTab === 'shop' && <ShopView kids={data.kids} onBuy={handleTaskAction} />}
 
-      <div className="relative z-20 px-4 pb-4 flex justify-center gap-2 md:gap-4 mt-auto">
-         <button onClick={() => setActiveTab('tasks')} className={`bg-blue-500 text-white text-sm md:text-xl font-black px-4 md:px-8 py-3 rounded-xl ${COMIC_BTN} ${activeTab === 'tasks' ? 'ring-4 ring-yellow-400' : ''}`}>משימות</button>
-         <button onClick={() => setActiveTab('shop')} className={`bg-orange-500 text-white text-sm md:text-xl font-black px-4 md:px-8 py-3 rounded-xl ${COMIC_BTN} ${activeTab === 'shop' ? 'ring-4 ring-yellow-400' : ''}`}>חנות</button>
+      <div className="relative z-20 px-4 pb-2 pt-1 flex justify-center gap-2 md:gap-4 shrink-0">
+         <button onClick={() => setActiveTab('tasks')} className={`bg-blue-500 text-white text-base md:text-xl font-black px-6 md:px-8 py-1.5 rounded-xl ${COMIC_BTN} ${activeTab === 'tasks' ? 'ring-4 ring-yellow-400' : ''}`}>משימות</button>
+         <button onClick={() => setActiveTab('shop')} className={`bg-orange-500 text-white text-base md:text-xl font-black px-6 md:px-8 py-1.5 rounded-xl ${COMIC_BTN} ${activeTab === 'shop' ? 'ring-4 ring-yellow-400' : ''}`}>חנות</button>
+         <div className="absolute left-3 bottom-2 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-mono shadow border border-slate-200 flex items-center gap-1" dir="ltr">
+           {status === 'connected' ? (
+             <><Wifi size={10} className="text-green-500"/> <span className="text-green-700">Online</span></>
+           ) : (
+             <><WifiOff size={10} className="text-red-500"/> <span className="text-red-600">{status}</span></>
+           )}
+         </div>
       </div>
 
       {showLoginModal && (
@@ -943,44 +915,36 @@ export default function App() {
            </div>
         </div>
       )}
-      
-      <div className="fixed bottom-6 right-6 z-40 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-mono shadow border border-slate-200 flex items-center gap-2" dir="ltr">
-        {status === 'connected' ? (
-          <><Wifi size={12} className="text-green-500"/> <span className="text-green-700">Online</span></>
-        ) : (
-          <><WifiOff size={12} className="text-red-500"/> <span className="text-red-600">{status}</span></>
-        )}
-      </div>
     </div>
   );
 }
 
 // --- Shop View ---
 const ShopView = ({ kids, onBuy }) => (
-  <div className="flex-1 p-4 overflow-y-auto bg-white/95 m-4 border-4 border-black rounded-xl relative z-20 mt-20">
-     <h2 className="text-4xl font-black text-center mb-8 uppercase tracking-widest bg-yellow-300 border-4 border-black inline-block px-4 rotate-[-2deg] mx-auto shadow-[4px_4px_0px_0px_#000]">חנות הכוחות</h2>
-     <div className="grid grid-cols-1 gap-6">
+  <div className="flex-1 min-h-0 mx-2 mb-1 p-3 bg-white/95 border-4 border-black rounded-xl relative z-20 flex flex-col">
+     <h2 className="self-center shrink-0 text-2xl font-black text-center mb-3 uppercase tracking-widest bg-yellow-300 border-4 border-black px-4 rotate-[-2deg] shadow-[4px_4px_0px_0px_#000]">חנות הכוחות</h2>
+     <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
         {kids.filter(k => k.ageGroup !== 'toddler').map(kid => (
-           <div key={kid.id} className="border-b-4 border-dashed border-gray-300 pb-6">
-              <div className="flex items-center gap-3 mb-4 bg-gray-100 p-2 rounded-lg border-2 border-black">
-                 <img src={AVATARS[kid.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white object-cover"/>
+           <div key={kid.id} className="min-h-0 flex flex-col gap-3 border-4 border-dashed border-gray-300 rounded-xl p-3">
+              <div className="shrink-0 flex items-center gap-3 bg-gray-100 p-2 rounded-lg border-2 border-black">
+                 <img src={AVATARS[kid.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white object-cover" alt={kid.name} />
                  <span className="font-black text-lg">{kid.name}</span>
-                 <span className="bg-yellow-400 px-2 border-2 border-black font-bold text-sm ml-auto shadow-[2px_2px_0px_0px_#000]">יש לך: {kid.points} נק'</span>
+                 <span className="bg-yellow-400 px-2 border-2 border-black font-bold text-sm mr-auto shadow-[2px_2px_0px_0px_#000]">יש לך: {kid.points} נק'</span>
               </div>
-              <div className="flex gap-4">
-                 <button 
+              <div className="flex-1 min-h-0 flex gap-3">
+                 <button
                    onClick={() => onBuy(kid.id, null, 'buy_double')}
                    disabled={kid.points < 100}
-                   className={`flex-1 bg-cyan-200 p-4 border-4 border-black flex flex-col items-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 100 ? 'opacity-50 grayscale' : ''}`}
+                   className={`flex-1 bg-cyan-200 p-2 border-4 border-black flex flex-col items-center justify-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 100 ? 'opacity-50 grayscale' : ''}`}
                  >
                     <Zap size={32} className="mb-2" />
                     <span className="font-black text-base">דאבל (100)</span>
                     <span className="text-xs font-bold mt-1">x2 נקודות לשעה!</span>
                  </button>
-                 <button 
+                 <button
                    onClick={() => onBuy(kid.id, null, 'buy_shield')}
                    disabled={kid.points < 150}
-                   className={`flex-1 bg-green-200 p-4 border-4 border-black flex flex-col items-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 150 ? 'opacity-50 grayscale' : ''}`}
+                   className={`flex-1 bg-green-200 p-2 border-4 border-black flex flex-col items-center justify-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 150 ? 'opacity-50 grayscale' : ''}`}
                  >
                     <Shield size={32} className="mb-2" />
                     <span className="font-black text-base">מגן (150)</span>
@@ -1175,8 +1139,12 @@ const HomeTab = ({ data, now, onAction }) => (
 
 // ---- משימות ----
 
-const TaskForm = ({ kid, data, onSubmit, onCancel }) => {
-  const [task, setTask] = useState({
+// initial: כשמוגדר, הטופס עורך משימה קיימת של הילד (בלי בחירת ילדים)
+const TaskForm = ({ kid, data, initial, onSubmit, onCancel }) => {
+  const [task, setTask] = useState(initial ? {
+    title: initial.title, value: initial.value, time: initial.time, isOneTime: !!initial.isOneTime,
+    days: initial.days || [], icon: initial.icon || 'star', impact: initial.impact || 'boss'
+  } : {
     title: '', value: 10, time: data.currentTimePhase, isOneTime: false, days: [data.currentDay], icon: 'star', impact: 'boss'
   });
   const [error, setError] = useState('');
@@ -1187,20 +1155,26 @@ const TaskForm = ({ kid, data, onSubmit, onCancel }) => {
 
   const submit = () => {
     if (!task.title.trim()) return setError('חסר שם למשימה');
-    if (kidIds.length === 0) return setError('בחר לפחות ילד אחד');
+    if (!initial && kidIds.length === 0) return setError('בחר לפחות ילד אחד');
     if (task.days.length === 0) return setError('בחר לפחות יום אחד');
     if (!Number.isInteger(task.value) || task.value < 1) return setError('הניקוד צריך להיות מספר חיובי');
-    onSubmit(kidIds, { id: 't' + Date.now(), title: task.title.trim(), value: task.value, time: task.time, status: 'open', isOneTime: task.isOneTime, days: task.days, icon: task.icon, impact: task.impact });
+    const fields = { title: task.title.trim(), value: task.value, time: task.time, isOneTime: task.isOneTime, days: task.days, icon: task.icon, impact: task.impact };
+    if (initial) onSubmit([kid.id], fields);
+    else onSubmit(kidIds, { id: 't' + Date.now(), status: 'open', ...fields });
   };
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="text-xs font-bold text-slate-500 mb-2">עבור מי (אפשר כמה ילדים, כל אחד מסמן בנפרד)</div>
-        <div className="flex gap-2">
-          {data.kids.map(k => <Chip key={k.id} active={kidIds.includes(k.id)} onClick={() => toggleKid(k.id)} className="flex-1">{k.name}</Chip>)}
+      {initial ? (
+        <div className="text-sm text-slate-500">עריכת משימה של <b className="text-slate-800">{kid.name}</b>. הסטטוס הנוכחי נשמר.</div>
+      ) : (
+        <div>
+          <div className="text-xs font-bold text-slate-500 mb-2">עבור מי (אפשר כמה ילדים, כל אחד מסמן בנפרד)</div>
+          <div className="flex gap-2">
+            {data.kids.map(k => <Chip key={k.id} active={kidIds.includes(k.id)} onClick={() => toggleKid(k.id)} className="flex-1">{k.name}</Chip>)}
+          </div>
         </div>
-      </div>
+      )}
 
       <input type="text" placeholder="שם המשימה (למשל: סידור חדר)" className="w-full p-3 rounded-xl border border-slate-300 text-lg" value={task.title} onChange={e => setTask({ ...task, title: e.target.value })} />
 
@@ -1264,7 +1238,7 @@ const TaskForm = ({ kid, data, onSubmit, onCancel }) => {
       {error && <div className="text-red-600 text-sm font-bold">{error}</div>}
 
       <div className="flex gap-2">
-        <button onClick={submit} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-md">הוסף משימה</button>
+        <button onClick={submit} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-md">{initial ? 'שמור שינויים' : kidIds.length > 1 ? `הוסף משימה ל-${kidIds.length} ילדים` : 'הוסף משימה'}</button>
         <button onClick={onCancel} className="px-5 bg-slate-200 text-slate-700 rounded-xl font-bold">ביטול</button>
       </div>
     </div>
@@ -1280,19 +1254,29 @@ const TASK_STATUS = {
 const TasksTab = ({ data, onAction }) => {
   const [kidId, setKidId] = useState(data.kids[0].id);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const kid = data.kids.find(k => k.id === kidId) || data.kids[0];
+  const editingTask = editingId ? kid.tasks.find(t => t.id === editingId) : null;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
         {data.kids.map(k => (
-          <button key={k.id} onClick={() => { setKidId(k.id); setShowForm(false); }} className={`flex-1 py-3 rounded-xl border-2 font-black flex items-center justify-center gap-2 ${k.id === kid.id ? `${k.color} border-black text-black` : 'bg-white border-slate-200 text-slate-500'}`}>
+          <button key={k.id} onClick={() => { setKidId(k.id); setShowForm(false); setEditingId(null); }} className={`flex-1 py-3 rounded-xl border-2 font-black flex items-center justify-center gap-2 ${k.id === kid.id ? `${k.color} border-black text-black` : 'bg-white border-slate-200 text-slate-500'}`}>
             {k.name}
           </button>
         ))}
       </div>
 
-      {showForm ? (
+      {editingTask ? (
+        <Card title="עריכת משימה" icon={Pencil}>
+          <TaskForm
+            key={editingTask.id} kid={kid} data={data} initial={editingTask}
+            onCancel={() => setEditingId(null)}
+            onSubmit={(_, fields) => { onAction('edit_task', { kidId: kid.id, taskId: editingTask.id, fields }); setEditingId(null); }}
+          />
+        </Card>
+      ) : showForm ? (
         <Card title="משימה חדשה" icon={Plus}>
           <TaskForm kid={kid} data={data} onCancel={() => setShowForm(false)} onSubmit={(kidIds, task) => { onAction('add_task', { kidIds, task }); setShowForm(false); }} />
         </Card>
@@ -1320,6 +1304,7 @@ const TasksTab = ({ data, onAction }) => {
                         {task.value} נק' • {formatDays(task.days)}{task.isOneTime ? ' • חד-פעמית' : ''}
                       </div>
                     </div>
+                    <button title="ערוך" onClick={() => { setShowForm(false); setEditingId(task.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-2 text-slate-600 hover:bg-slate-200 rounded-lg"><Pencil size={18} /></button>
                     {task.status !== 'open' && (
                       <button title="החזר למצב פתוח" onClick={() => onAction('reset_task', { kidId: kid.id, taskId: task.id })} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><RotateCcw size={18} /></button>
                     )}
