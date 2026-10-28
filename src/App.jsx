@@ -9,7 +9,7 @@ import {
   Sun, Moon, Cloud, ShoppingBag, List, Menu, Utensils,
   Wifi, WifiOff, Gamepad2, Sparkles, Shirt, Bath, Dog, Footprints, ThumbsUp,
   Disc, // For dishwasher plate representation
-  Home, ListChecks, Coins, SlidersHorizontal, Hourglass, Pencil, FlaskConical
+  Home, ListChecks, Coins, SlidersHorizontal, Hourglass, Pencil, FlaskConical, Gift, X
 } from 'lucide-react';
 
 // ==========================================
@@ -274,6 +274,7 @@ const realTime = getJerusalemNow();
 const INITIAL_DATA = { 
   familyGoal: 350, pizzaOffset: 0, bossHP: 500, maxBossHP: 500, currentDay: realTime.day, currentTimePhase: realTime.phase,
   lastResetDate: toDateKey(getLogicalDate(realTime)), timeOverride: null, bedtime: { days: {} },
+  rewards: [], orders: [], spendLog: [],
   kids: [
     { id: 1, name: "איתמר", ageGroup: "big", color: "bg-cyan-400", lightColor: "bg-cyan-100", points: 120, lifetimePoints: 1500, familyPoints: 120, inventory: { shields: 2 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
     { id: 2, name: "רוני", ageGroup: "big", color: "bg-purple-400", lightColor: "bg-purple-100", points: 90, lifetimePoints: 800, familyPoints: 90, inventory: { shields: 0 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
@@ -285,7 +286,7 @@ const INITIAL_DATA = {
 // לוגיקה משותפת (רצה בתוך טרנזקציה על המסמך העדכני)
 // ==========================================
 
-// הפיצה = סכום התרומות של הילדים + תיקון ידני של ההורים (איפוס / הגדרת ערך)
+// מד היציאה המשפחתית = סכום התרומות של הילדים + תיקון ידני של ההורים (איפוס / הגדרת ערך)
 const getKidsPizzaSum = (d) => d.kids.reduce((a, k) => a + (k.familyPoints || k.points || 0), 0);
 const getPizza = (d) => Math.max(0, getKidsPizzaSum(d) + (d.pizzaOffset || 0));
 
@@ -306,6 +307,13 @@ const applyApproval = (d, kid, t) => {
 
   if (t.isOneTime) kid.tasks = kid.tasks.filter(x => x.id !== t.id);
   else { t.status = 'done'; delete t.doubled; }
+};
+
+// ניצול נקודות על פרס / בילוי: מוריד נקודות ורושם ביומן ההוצאות
+const chargeKid = (d, kid, name, points) => {
+  if (kid.points < points) throw new Error(`ל${kid.name} אין מספיק נקודות (יש ${kid.points}, צריך ${points})`);
+  kid.points -= points;
+  d.spendLog = [{ id: `s${Date.now()}-${kid.id}`, at: Date.now(), kidId: kid.id, name, points }, ...(d.spendLog || [])].slice(0, 200);
 };
 
 // משימות שחוזרות (לא חד-פעמיות) נפתחות מחדש בכל יום חדש
@@ -393,50 +401,101 @@ const ParentLogin = ({ onLogin }) => (
   </div>
 );
 
-const BigRedButton = ({ onClick, label, iconKey, points }) => (
-  <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-    <button 
-      onClick={onClick}
-      className={`h-full max-h-44 aspect-square rounded-full bg-red-500 ${COMIC_BORDER} shadow-[0_6px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-y-2 transition-all flex flex-col items-center justify-center text-white animate-pulse overflow-hidden`}
-    >
-      <div className="transform scale-110 mb-1 text-white drop-shadow-[2px_2px_0_#000]">
-          {getIconComponent(iconKey, label)}
-      </div>
-      <span className="text-[clamp(0.75rem,2.2vh,1.15rem)] font-black leading-tight text-center px-2 text-shadow-black">{label}</span>
-      <span className="text-xs font-bold bg-yellow-400 text-black px-2 rounded-full border border-black shadow-sm transform -rotate-3">{points} נק'</span>
-    </button>
-  </div>
-);
-
-// dense: כשיש הרבה משימות בעמודה - שורה אחת קטנה לכל משימה כדי שהכל ייכנס בלי גלילה
-const TaskItem = ({ title, points, iconKey, isDone, onClick, dense }) => (
-  <div className={`flex-1 max-h-20 w-full ${dense ? 'min-h-0' : 'min-h-[2.75rem]'}`}>
-    <div className={`h-full bg-white border-black px-2 rounded-xl flex items-center justify-between gap-2 shadow-[3px_3px_0px_0px_#000] ${dense ? 'border-2' : 'border-4'}`}>
-      <div className="flex items-center gap-2 min-w-0 h-full py-1">
-        <div className="h-[80%] max-h-12 aspect-square p-0.5 rounded-lg border-2 border-black flex-shrink-0 bg-gray-50 flex items-center justify-center [&_svg]:w-full [&_svg]:h-full [&>div]:!w-full [&>div]:!h-full">
-          {getIconComponent(iconKey, title)}
+// variant: normal = שורה מלאה, compact = שורה אחת קטנה, tile = שתי משימות בשורה (כשיש הרבה משימות בעמודה)
+const TaskItem = ({ title, points, iconKey, onClick, variant = 'normal' }) => {
+  const small = variant !== 'normal';
+  return (
+    <div className={`w-full ${variant === 'tile' ? 'min-h-0 max-h-14' : small ? 'flex-1 min-h-0 max-h-12' : 'flex-1 min-h-[2.75rem] max-h-20'}`}>
+      <div className={`h-full bg-white border-black rounded-xl flex items-center justify-between gap-1.5 shadow-[3px_3px_0px_0px_#000] ${small ? 'border-2 px-1.5' : 'border-4 px-2'}`}>
+        <div className="flex items-center gap-1.5 min-w-0 h-full py-0.5">
+          <div className="h-[75%] max-h-12 aspect-square p-0.5 rounded-lg border-2 border-black flex-shrink-0 bg-gray-50 flex items-center justify-center [&_svg]:w-full [&_svg]:h-full [&>div]:!w-full [&>div]:!h-full">
+            {getIconComponent(iconKey, title)}
+          </div>
+          {variant === 'normal' ? (
+            <div className="min-w-0">
+              <div className="font-black text-[clamp(0.8rem,2.1vh,1.05rem)] leading-tight line-clamp-2 break-words">{title}</div>
+              <div className="text-[11px] font-bold bg-yellow-300 inline-block px-1 border border-black">{points} נק'</div>
+            </div>
+          ) : variant === 'compact' ? (
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="font-black text-xs leading-tight truncate">{title}</span>
+              <span className="text-[10px] font-bold bg-yellow-300 px-1 border border-black flex-shrink-0">{points}</span>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <div className="font-black text-[11px] leading-tight line-clamp-2 break-words">{title}</div>
+              <span className="text-[9px] font-bold bg-yellow-300 px-1 border border-black">{points}</span>
+            </div>
+          )}
         </div>
-        {dense ? (
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="font-black text-xs leading-tight truncate">{title}</span>
-            <span className="text-[10px] font-bold bg-yellow-300 px-1 border border-black flex-shrink-0">{points}</span>
-          </div>
-        ) : (
-          <div className="min-w-0">
-            <div className="font-black text-[clamp(0.8rem,2.1vh,1.05rem)] leading-tight line-clamp-2 break-words">{title}</div>
-            <div className="text-[11px] font-bold bg-yellow-300 inline-block px-1 border border-black">{points} נק'</div>
-          </div>
-        )}
+        <button
+          onClick={onClick}
+          className={`h-[70%] max-h-10 aspect-square border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ${small ? 'border-2' : 'border-4'}`}
+        ></button>
       </div>
-      <button
-        onClick={onClick}
-        className={`h-[70%] max-h-10 aspect-square border-black rounded-lg bg-white hover:bg-green-400 flex-shrink-0 flex items-center justify-center transition-colors ${dense ? 'border-2' : 'border-4'}`}
-      >
-        {isDone && <Check size={20} strokeWidth={4} />}
-      </button>
     </div>
-  </div>
-);
+  );
+};
+
+// --- Catalog (kiosk) ---
+// קטלוג הפרסים: הילד בוחר מי הוא ומזמין, וההזמנה מחכה לאישור הורים
+const CatalogModal = ({ data, onOrder, onClose }) => {
+  const [kidId, setKidId] = useState(null);
+  const rewards = data.rewards || [];
+  const reserved = (id) => (data.orders || []).filter(o => o.kidId === id).reduce((a, o) => a + o.price, 0);
+  const kid = data.kids.find(k => k.id === kidId);
+  const available = kid ? kid.points - reserved(kid.id) : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-3" onClick={onClose}>
+      <div className={`bg-white ${COMIC_BORDER} rounded-2xl w-full max-w-3xl max-h-[92dvh] flex flex-col overflow-hidden shadow-[8px_8px_0_0_#000]`} onClick={e => e.stopPropagation()}>
+        <div className="shrink-0 bg-yellow-400 border-b-4 border-black px-4 py-2 flex items-center justify-between">
+          <h2 className="text-2xl font-black text-black">🎁 קטלוג הפרסים</h2>
+          <button onClick={onClose} className={`bg-white w-9 h-9 rounded-lg flex items-center justify-center ${COMIC_BORDER}`}><X size={20} strokeWidth={3} /></button>
+        </div>
+
+        <div className="shrink-0 p-3 grid grid-cols-3 gap-2 border-b-2 border-dashed border-gray-300">
+          {data.kids.map(k => (
+            <button key={k.id} onClick={() => setKidId(k.id)} className={`flex items-center gap-2 p-2 rounded-xl border-4 border-black text-right ${k.id === kidId ? `${k.color} ${COMIC_SHADOW_SM}` : 'bg-gray-100'}`}>
+              <img src={AVATARS[k.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white object-cover" alt="" />
+              <div className="min-w-0">
+                <div className="font-black leading-tight">{k.name}</div>
+                <div className="text-xs font-bold">⭐ {k.points - reserved(k.id)}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          {!kid && rewards.length > 0 && <div className="text-center font-black text-slate-500 mb-3">קודם בוחרים מי מזמין 👆</div>}
+          {rewards.length === 0 ? (
+            <div className="text-center font-black text-slate-400 py-10">עוד אין פרסים בקטלוג. ההורים יוסיפו בקרוב!</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {rewards.map(r => {
+                const canBuy = kid && available >= r.price;
+                return (
+                  <div key={r.id} className="border-4 border-black rounded-xl p-3 flex flex-col items-center text-center gap-1 bg-sky-50 shadow-[3px_3px_0_0_#000]">
+                    <div className="text-4xl">{r.icon || '🎁'}</div>
+                    <div className="font-black leading-tight">{r.name}</div>
+                    <div className="bg-yellow-300 border-2 border-black px-2 rounded-full font-black text-sm">⭐ {r.price}</div>
+                    <button
+                      disabled={!canBuy}
+                      onClick={() => onOrder(kid.id, r.id)}
+                      className={`mt-1 w-full py-1.5 rounded-lg font-black text-sm ${canBuy ? `bg-green-400 ${COMIC_BTN}` : 'bg-gray-200 text-gray-500 border-2 border-gray-300'}`}
+                    >
+                      {!kid ? 'בחר מי מזמין' : canBuy ? 'הזמן!' : `חסרות ${r.price - available} נק'`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Bedtime (kiosk) ---
 const BedtimePanel = ({ data, now, onSleep }) => {
@@ -490,7 +549,7 @@ const mutateDoc = (fn) => runTransaction(db, async (tx) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [data, setData] = useState(null);
-  const [activeTab, setActiveTab] = useState('tasks');
+  const [showCatalog, setShowCatalog] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -608,8 +667,6 @@ export default function App() {
         await mutateDoc(d => {
             const kid = d.kids.find(k => k.id === kidId);
             if (!kid) return false;
-            kid.activeEffects = kid.activeEffects || { doublePointsUntil: 0 };
-            kid.inventory = kid.inventory || { shields: 0 };
 
             if (action === 'complete') {
                 const t = kid.tasks.find(t => t.id === task.id);
@@ -619,22 +676,34 @@ export default function App() {
                 t.doubled = isDoubleActive(kid); // הכפל נקבע ברגע הביצוע, לא ברגע האישור
                 msg = "נשלח לאישור הורים!";
             }
-            else if (action === 'buy_double' && kid.points >= 100) {
-                kid.points -= 100;
-                kid.activeEffects.doublePointsUntil = Math.max(Date.now(), kid.activeEffects.doublePointsUntil || 0) + 3600000;
-                msg = "דאבל פעיל לשעה!";
-            }
-            else if (action === 'buy_shield' && kid.points >= 150) {
-                kid.points -= 150;
-                kid.inventory.shields = (kid.inventory.shields || 0) + 1;
-                msg = "קנית מגן!";
-            }
             else return false;
         });
         if (msg) showToast(msg);
     } catch (err) {
         console.error("Update Error:", err);
         alert("שגיאה בשמירת הפעולה: " + err.message);
+    }
+  };
+
+  // הילד מזמין פרס מהקטלוג; הנקודות יורדות רק כשההורה מאשר, עד אז הן "שמורות"
+  const handleOrderReward = async (kidId, rewardId) => {
+    try {
+        let msg = null;
+        await mutateDoc(d => {
+            const kid = d.kids.find(k => k.id === kidId);
+            const reward = (d.rewards || []).find(r => r.id === rewardId);
+            if (!kid || !reward) return false;
+            d.orders = d.orders || [];
+            const reserved = d.orders.filter(o => o.kidId === kidId).reduce((a, o) => a + o.price, 0);
+            if (kid.points - reserved < reward.price) { msg = "אין מספיק נקודות"; return false; }
+            d.orders.push({ id: 'o' + Date.now(), kidId, rewardId, name: reward.name, icon: reward.icon || '', price: reward.price, at: Date.now() });
+            msg = `${kid.name} הזמין: ${reward.name}! מחכה לאישור הורים`;
+        });
+        if (msg) showToast(msg);
+        setShowCatalog(false);
+    } catch (err) {
+        console.error("Order Error:", err);
+        alert("שגיאה בשליחת ההזמנה: " + err.message);
     }
   };
 
@@ -685,6 +754,49 @@ export default function App() {
                     if (!kid) return false;
                     kid.tasks = kid.tasks.filter(t => t.id !== payload.taskId);
                     break;
+                case 'add_reward':
+                    d.rewards = d.rewards || [];
+                    d.rewards.push({ id: 'r' + Date.now(), ...payload.reward });
+                    msg = "הפרס נוסף לקטלוג";
+                    break;
+                case 'edit_reward': {
+                    const r = (d.rewards || []).find(r => r.id === payload.rewardId);
+                    if (!r) return false;
+                    Object.assign(r, payload.fields);
+                    msg = "הפרס עודכן";
+                    break;
+                }
+                case 'delete_reward':
+                    d.rewards = (d.rewards || []).filter(r => r.id !== payload.rewardId);
+                    break;
+                case 'spend_points': {
+                    const targets = d.kids.filter(k => payload.kidIds.includes(k.id));
+                    if (targets.length === 0) return false;
+                    targets.forEach(k => chargeKid(d, k, payload.name, payload.points));
+                    msg = "הנקודות נוצלו";
+                    break;
+                }
+                case 'approve_order': {
+                    const o = (d.orders || []).find(o => o.id === payload.orderId);
+                    const orderKid = o && d.kids.find(k => k.id === o.kidId);
+                    if (!orderKid) return false;
+                    chargeKid(d, orderKid, o.name, o.price);
+                    d.orders = d.orders.filter(x => x.id !== o.id);
+                    msg = "ההזמנה אושרה";
+                    break;
+                }
+                case 'reject_order':
+                    d.orders = (d.orders || []).filter(o => o.id !== payload.orderId);
+                    break;
+                case 'refund_spend': {
+                    const entry = (d.spendLog || []).find(e => e.id === payload.entryId);
+                    if (!entry) return false;
+                    const refundKid = d.kids.find(k => k.id === entry.kidId);
+                    if (refundKid) refundKid.points += entry.points;
+                    d.spendLog = d.spendLog.filter(e => e.id !== entry.id);
+                    msg = "ההוצאה בוטלה והנקודות הוחזרו";
+                    break;
+                }
                 case 'edit_task':
                     if (!task) return false;
                     Object.assign(task, payload.fields); // הסטטוס וה-id נשארים
@@ -715,11 +827,11 @@ export default function App() {
                 case 'set_pizza':
                     d.familyGoal = payload.goal;
                     d.pizzaOffset = payload.current - getKidsPizzaSum(d);
-                    msg = "הפיצה עודכנה";
+                    msg = "היציאה המשפחתית עודכנה";
                     break;
                 case 'reset_pizza':
                     d.pizzaOffset = -getKidsPizzaSum(d);
-                    msg = "הפיצה אופסה";
+                    msg = "היציאה המשפחתית אופסה";
                     break;
                 case 'reset_all': {
                     // איפוס משחק מלא; שומרים זמן, מצב בדיקה ויומן שעות השינה
@@ -824,6 +936,7 @@ export default function App() {
     { kid: roni, bg: 'bg-purple-100', avatar: AVATARS[2], flip: false },
     { kid: itamar, bg: 'bg-blue-100', avatar: AVATARS[1], flip: true }
   ];
+  const bedtimeVisible = getEveningInfo(now).inWindow;
 
   return (
     <div className="h-[100dvh] font-comic overflow-hidden flex flex-col relative" style={BG_STYLE}>
@@ -834,7 +947,10 @@ export default function App() {
       {/* HEADER */}
       <header className="relative z-20 px-2 pt-1 shrink-0">
         <div className="flex justify-between items-center">
-           <button onClick={() => setShowLoginModal(true)} className="opacity-50 hover:opacity-100 transition"><Settings className="text-white drop-shadow-md"/></button>
+           <div className="flex items-center gap-2">
+             <button onClick={() => setShowLoginModal(true)} className="opacity-50 hover:opacity-100 transition"><Settings className="text-white drop-shadow-md"/></button>
+             <button onClick={() => setShowCatalog(true)} className={`bg-white text-black text-xs font-black px-3 py-0.5 rounded-full flex items-center gap-1 ${COMIC_BTN}`}><Gift size={14} /> קטלוג</button>
+           </div>
            <div className={`bg-white px-3 py-0.5 rounded-full text-xs font-black text-black flex items-center gap-2 ${COMIC_BORDER} shadow-sm`}>
                 <span className="flex items-center gap-1">
                   {data.currentTimePhase === 'morning' ? <Sun size={14} className="text-orange-500"/> : data.currentTimePhase === 'noon' ? <Cloud size={14} className="text-blue-400"/> : <Moon size={14} className="text-indigo-600"/>}
@@ -848,7 +964,7 @@ export default function App() {
 
         <div className="flex justify-between items-end gap-4 mt-1">
            <div className="flex-1 min-w-[30%]">
-               <BossBar current={getPizza(data)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
+               <BossBar current={getPizza(data)} max={data.familyGoal} label="יציאה משפחתית" color="bg-yellow-400" />
            </div>
            <div className="flex-none z-30 mx-2">
                <MainTitle />
@@ -860,30 +976,28 @@ export default function App() {
       </header>
 
       {/* MAIN COMIC PANELS: עמודה לכל ילד, הכל בתוך המסך בלי גלילה */}
-      {activeTab === 'tasks' && (
-      <main className="flex-1 min-h-0 relative z-30 px-2 pt-1 pb-1 grid grid-cols-3 gap-2 md:gap-3">
+      <main className="flex-1 min-h-0 relative z-30 px-2 pt-1 pb-2 grid grid-cols-3 gap-2 md:gap-3">
         {COLUMNS.map(({ kid, bg, avatar, flip }) => {
           const tasks = openTasks(kid);
+          // הרבה משימות? עוברים לשורות קטנות, ואם עדיין יותר מדי - שתי משימות בשורה
+          const load = tasks.length + (kid.id === BED_KID_ID && bedtimeVisible ? 2 : 0);
+          const variant = load <= 5 ? 'normal' : load <= 8 ? 'compact' : 'tile';
           return (
             <section key={kid.id} className="min-h-0 flex flex-col">
-              <div className="relative h-[22vh] shrink-0 flex justify-center items-end pointer-events-none z-10">
-                <img src={avatar} className={`h-full w-auto max-w-full object-contain object-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] ${flip ? '-scale-x-100' : ''}`} alt={kid.name} />
+              <div className="relative h-[31vh] shrink-0 flex justify-center items-end pointer-events-none z-10">
+                <img src={avatar} className={`h-full w-auto max-w-none object-contain object-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)] ${flip ? '-scale-x-100' : ''}`} alt={kid.name} />
               </div>
               <div className="relative z-20 -mt-5 px-2 shrink-0">
                 <NameBubble name={kid.name} points={kid.points} />
               </div>
               <div className={`flex-1 min-h-0 relative z-10 border-4 border-black ${bg} bg-[url('https://www.transparenttextures.com/patterns/comic-dots.png')] shadow-[6px_6px_0px_0px_rgba(0,0,0,0.5)] px-2 pt-3 pb-2 flex flex-col overflow-hidden`}>
-                <div className={`flex-1 min-h-0 flex flex-col ${tasks.length > 5 ? 'gap-1' : 'gap-2'}`}>
+                <div className={`flex-1 min-h-0 ${variant === 'tile' ? 'grid grid-cols-2 auto-rows-fr gap-1' : `flex flex-col ${variant === 'compact' ? 'gap-1' : 'gap-2'}`}`}>
                   {tasks.length === 0 && (
-                    <div className="flex-1 flex items-center justify-center text-center font-black text-slate-400">אין משימות כרגע 🎉</div>
+                    <div className="flex-1 col-span-2 flex items-center justify-center text-center font-black text-slate-400">אין משימות כרגע 🎉</div>
                   )}
-                  {kid.ageGroup === 'toddler'
-                    ? tasks.map(task => (
-                        <BigRedButton key={task.id} label={task.title} points={taskPoints(kid, task)} iconKey={task.icon} onClick={() => handleTaskAction(kid.id, task, 'complete')} />
-                      ))
-                    : tasks.map(task => (
-                        <TaskItem key={task.id} dense={tasks.length > 5} title={task.title} points={taskPoints(kid, task)} iconKey={task.icon} onClick={() => handleTaskAction(kid.id, task, 'complete')} />
-                      ))}
+                  {tasks.map(task => (
+                    <TaskItem key={task.id} variant={variant} title={task.title} points={taskPoints(kid, task)} iconKey={task.icon} onClick={() => handleTaskAction(kid.id, task, 'complete')} />
+                  ))}
                 </div>
                 {kid.id === BED_KID_ID && <BedtimePanel data={data} now={now} onSleep={handleSleepNow} />}
               </div>
@@ -891,21 +1005,8 @@ export default function App() {
           );
         })}
       </main>
-      )}
 
-      {activeTab === 'shop' && <ShopView kids={data.kids} onBuy={handleTaskAction} />}
-
-      <div className="relative z-20 px-4 pb-2 pt-1 flex justify-center gap-2 md:gap-4 shrink-0">
-         <button onClick={() => setActiveTab('tasks')} className={`bg-blue-500 text-white text-base md:text-xl font-black px-6 md:px-8 py-1.5 rounded-xl ${COMIC_BTN} ${activeTab === 'tasks' ? 'ring-4 ring-yellow-400' : ''}`}>משימות</button>
-         <button onClick={() => setActiveTab('shop')} className={`bg-orange-500 text-white text-base md:text-xl font-black px-6 md:px-8 py-1.5 rounded-xl ${COMIC_BTN} ${activeTab === 'shop' ? 'ring-4 ring-yellow-400' : ''}`}>חנות</button>
-         <div className="absolute left-3 bottom-2 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-mono shadow border border-slate-200 flex items-center gap-1" dir="ltr">
-           {status === 'connected' ? (
-             <><Wifi size={10} className="text-green-500"/> <span className="text-green-700">Online</span></>
-           ) : (
-             <><WifiOff size={10} className="text-red-500"/> <span className="text-red-600">{status}</span></>
-           )}
-         </div>
-      </div>
+      {showCatalog && <CatalogModal data={data} onOrder={handleOrderReward} onClose={() => setShowCatalog(false)} />}
 
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -915,53 +1016,23 @@ export default function App() {
            </div>
         </div>
       )}
+
+      <div className="fixed bottom-1 left-2 z-40 bg-white/80 px-2 rounded-full text-[9px] font-mono flex items-center gap-1" dir="ltr">
+        {status === 'connected' ? (
+          <><Wifi size={9} className="text-green-500"/> <span className="text-green-700">Online</span></>
+        ) : (
+          <><WifiOff size={9} className="text-red-500"/> <span className="text-red-600">{status}</span></>
+        )}
+      </div>
     </div>
   );
 }
-
-// --- Shop View ---
-const ShopView = ({ kids, onBuy }) => (
-  <div className="flex-1 min-h-0 mx-2 mb-1 p-3 bg-white/95 border-4 border-black rounded-xl relative z-20 flex flex-col">
-     <h2 className="self-center shrink-0 text-2xl font-black text-center mb-3 uppercase tracking-widest bg-yellow-300 border-4 border-black px-4 rotate-[-2deg] shadow-[4px_4px_0px_0px_#000]">חנות הכוחות</h2>
-     <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-        {kids.filter(k => k.ageGroup !== 'toddler').map(kid => (
-           <div key={kid.id} className="min-h-0 flex flex-col gap-3 border-4 border-dashed border-gray-300 rounded-xl p-3">
-              <div className="shrink-0 flex items-center gap-3 bg-gray-100 p-2 rounded-lg border-2 border-black">
-                 <img src={AVATARS[kid.id]} className="w-10 h-10 rounded-full border-2 border-black bg-white object-cover" alt={kid.name} />
-                 <span className="font-black text-lg">{kid.name}</span>
-                 <span className="bg-yellow-400 px-2 border-2 border-black font-bold text-sm mr-auto shadow-[2px_2px_0px_0px_#000]">יש לך: {kid.points} נק'</span>
-              </div>
-              <div className="flex-1 min-h-0 flex gap-3">
-                 <button
-                   onClick={() => onBuy(kid.id, null, 'buy_double')}
-                   disabled={kid.points < 100}
-                   className={`flex-1 bg-cyan-200 p-2 border-4 border-black flex flex-col items-center justify-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 100 ? 'opacity-50 grayscale' : ''}`}
-                 >
-                    <Zap size={32} className="mb-2" />
-                    <span className="font-black text-base">דאבל (100)</span>
-                    <span className="text-xs font-bold mt-1">x2 נקודות לשעה!</span>
-                 </button>
-                 <button
-                   onClick={() => onBuy(kid.id, null, 'buy_shield')}
-                   disabled={kid.points < 150}
-                   className={`flex-1 bg-green-200 p-2 border-4 border-black flex flex-col items-center justify-center shadow-[4px_4px_0px_0px_#000] active:translate-y-1 active:shadow-none transition-all ${kid.points < 150 ? 'opacity-50 grayscale' : ''}`}
-                 >
-                    <Shield size={32} className="mb-2" />
-                    <span className="font-black text-base">מגן (150)</span>
-                    <span className="text-xs font-bold mt-1">מדלג על מטלה אחת</span>
-                 </button>
-              </div>
-           </div>
-        ))}
-     </div>
-  </div>
-);
 
 // --- Admin Panel Content ---
 
 const IMPACT_OPTIONS = [
   { key: 'boss', label: 'מפלצת הבלגן', hint: 'מוריד חיים למפלצת' },
-  { key: 'pizza', label: 'פיצה משפחתית', hint: 'ממלא את הפיצה' },
+  { key: 'pizza', label: 'יציאה משפחתית', hint: 'ממלא את מד היציאה' },
   { key: 'none', label: 'ללא השפעה', hint: 'רק נקודות לילד' }
 ];
 
@@ -1117,7 +1188,7 @@ const StatusCard = ({ data }) => {
     <Card title="מצב המשחק" icon={Star}>
       <div className="grid grid-cols-2 gap-3 text-center">
         <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
-          <div className="text-xs text-slate-500">פיצה משפחתית</div>
+          <div className="text-xs text-slate-500">יציאה משפחתית</div>
           <div className="text-xl font-black text-yellow-700">{pizza} / {data.familyGoal}</div>
         </div>
         <div className="bg-red-50 rounded-xl p-3 border border-red-100">
@@ -1129,8 +1200,36 @@ const StatusCard = ({ data }) => {
   );
 };
 
+// הזמנות שהילדים שלחו מהקטלוג - ההורה מאשר ואז הנקודות יורדות
+const OrdersCard = ({ data, onAction }) => {
+  const orders = data.orders || [];
+  if (orders.length === 0) return null;
+  return (
+    <Card title={`הזמנות מהקטלוג (${orders.length})`} icon={Gift}>
+      <div className="space-y-2">
+        {orders.map(o => {
+          const kid = data.kids.find(k => k.id === o.kidId);
+          const enough = kid && kid.points >= o.price;
+          return (
+            <div key={o.id} className="flex items-center gap-3 bg-sky-50 p-3 rounded-xl border border-sky-100">
+              <span className="text-2xl">{o.icon || '🎁'}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-800 truncate">{o.name}</div>
+                <div className="text-xs text-slate-500">{kid?.name} • {o.price} נק'{enough ? '' : ' • אין מספיק נקודות'}</div>
+              </div>
+              <button onClick={() => onAction('reject_order', { orderId: o.id })} title="דחה" className="p-2 text-slate-500 hover:bg-sky-100 rounded-lg"><X size={18} /></button>
+              <button disabled={!enough} onClick={() => onAction('approve_order', { orderId: o.id })} className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-600 disabled:opacity-40 flex items-center gap-1"><Check size={16} /> אשר</button>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+};
+
 const HomeTab = ({ data, now, onAction }) => (
   <div className="space-y-4">
+    <OrdersCard data={data} onAction={onAction} />
     <ApprovalsCard data={data} onAction={onAction} />
     <BedtimeCard data={data} now={now} onAction={onAction} />
     <StatusCard data={data} />
@@ -1321,6 +1420,131 @@ const TasksTab = ({ data, onAction }) => {
   );
 };
 
+// ---- פרסים: קטלוג, הוצאת נקודות והיסטוריה ----
+
+const REWARD_EMOJIS = ['🎬', '🍔', '🍕', '🍦', '🎮', '🎢', '🧸', '🏊', '🎳', '🛍️', '📱', '🎁'];
+
+const RewardForm = ({ initial, onSubmit, onCancel }) => {
+  const [reward, setReward] = useState(initial || { name: '', price: 50, icon: '🎁' });
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    if (!reward.name.trim()) return setError('חסר שם לפרס');
+    if (!Number.isInteger(reward.price) || reward.price < 1) return setError('המחיר צריך להיות מספר חיובי');
+    onSubmit({ name: reward.name.trim(), price: reward.price, icon: reward.icon });
+  };
+
+  return (
+    <div className="space-y-3">
+      <input type="text" placeholder="שם הפרס (למשל: יציאה לסרט)" className="w-full p-3 rounded-xl border border-slate-300 text-lg" value={reward.name} onChange={e => setReward({ ...reward, name: e.target.value })} />
+      <div className="flex flex-wrap gap-2">
+        {REWARD_EMOJIS.map(e => (
+          <button key={e} type="button" onClick={() => setReward({ ...reward, icon: e })} className={`text-2xl w-11 h-11 rounded-xl border-2 ${reward.icon === e ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}>{e}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs font-bold text-slate-500">מחיר בנקודות</span>
+        {[25, 50, 100, 150, 200].map(v => <Chip key={v} active={reward.price === v} onClick={() => setReward({ ...reward, price: v })}>{v}</Chip>)}
+        <input type="number" min="1" className="w-20 p-2 rounded-xl border border-slate-300" value={Number.isNaN(reward.price) ? '' : reward.price} onChange={e => setReward({ ...reward, price: parseInt(e.target.value, 10) })} />
+      </div>
+      {error && <div className="text-red-600 text-sm font-bold">{error}</div>}
+      <div className="flex gap-2">
+        <button onClick={submit} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-md">{initial ? 'שמור שינויים' : 'הוסף לקטלוג'}</button>
+        <button onClick={onCancel} className="px-5 bg-slate-200 text-slate-700 rounded-xl font-bold">ביטול</button>
+      </div>
+    </div>
+  );
+};
+
+const formatLogDate = (at) => new Date(at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const RewardsTab = ({ data, onAction }) => {
+  const rewards = data.rewards || [];
+  const log = data.spendLog || [];
+  const [form, setForm] = useState(null); // null | 'new' | rewardId
+  const [spend, setSpend] = useState({ name: '', points: 50, kidIds: [] });
+  const [spendError, setSpendError] = useState('');
+
+  const toggleKid = (id) => setSpend(prev => ({ ...prev, kidIds: prev.kidIds.includes(id) ? prev.kidIds.filter(k => k !== id) : [...prev.kidIds, id] }));
+
+  const submitSpend = () => {
+    if (!spend.name.trim()) return setSpendError('כתוב על מה הוצאו הנקודות');
+    if (!Number.isInteger(spend.points) || spend.points < 1) return setSpendError('מספר הנקודות צריך להיות חיובי');
+    if (spend.kidIds.length === 0) return setSpendError('בחר לפחות ילד אחד');
+    const short = data.kids.filter(k => spend.kidIds.includes(k.id) && k.points < spend.points);
+    if (short.length) return setSpendError(`אין מספיק נקודות: ${short.map(k => `${k.name} (${k.points})`).join(', ')}`);
+    setSpendError('');
+    onAction('spend_points', { kidIds: spend.kidIds, name: spend.name.trim(), points: spend.points });
+    setSpend({ name: '', points: 50, kidIds: [] });
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card title="הוצאת נקודות" icon={Coins}>
+        <p className="text-xs text-slate-500 mb-3">לכתוב על מה הוצאנו נקודות (סרט, מקדונלדס וכו'). כל ילד שנבחר משלם את מספר הנקודות שמוגדר.</p>
+        <div className="space-y-3">
+          {rewards.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {rewards.map(r => <button key={r.id} onClick={() => setSpend(prev => ({ ...prev, name: r.name, points: r.price }))} className="px-3 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-sm font-bold text-sky-800 hover:bg-sky-100">{r.icon} {r.name} ({r.price})</button>)}
+            </div>
+          )}
+          <input type="text" placeholder="על מה הוצאנו? (כתיבה חופשית)" className="w-full p-3 rounded-xl border border-slate-300 text-lg" value={spend.name} onChange={e => setSpend({ ...spend, name: e.target.value })} />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500">נקודות לכל ילד</span>
+            <input type="number" min="1" className="w-24 p-2 rounded-xl border border-slate-300 text-center font-bold" value={Number.isNaN(spend.points) ? '' : spend.points} onChange={e => setSpend({ ...spend, points: parseInt(e.target.value, 10) })} />
+          </div>
+          <div className="flex gap-2">
+            {data.kids.map(k => <Chip key={k.id} active={spend.kidIds.includes(k.id)} onClick={() => toggleKid(k.id)} className="flex-1">{k.name} ({k.points})</Chip>)}
+          </div>
+          {spendError && <div className="text-red-600 text-sm font-bold">{spendError}</div>}
+          <button onClick={submitSpend} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-md">הוצא נקודות</button>
+        </div>
+      </Card>
+
+      <Card title="קטלוג פרסים" icon={Gift} right={form === null && <button onClick={() => setForm('new')} className="bg-blue-600 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus size={14} /> פרס חדש</button>}>
+        <p className="text-xs text-slate-500 mb-3">תעריפים מראש. הילדים רואים את הקטלוג על המסך ויכולים להזמין, וההזמנה מחכה לאישור שלך בטאב "בית".</p>
+        {form === 'new' && <div className="mb-4"><RewardForm onCancel={() => setForm(null)} onSubmit={(reward) => { onAction('add_reward', { reward }); setForm(null); }} /></div>}
+        {rewards.length === 0 && form !== 'new' && <div className="text-center text-slate-400 py-4">הקטלוג ריק. הוסף פרס ראשון</div>}
+        <div className="space-y-2">
+          {rewards.map(r => form === r.id ? (
+            <div key={r.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <RewardForm initial={{ name: r.name, price: r.price, icon: r.icon || '🎁' }} onCancel={() => setForm(null)} onSubmit={(fields) => { onAction('edit_reward', { rewardId: r.id, fields }); setForm(null); }} />
+            </div>
+          ) : (
+            <div key={r.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-2xl">{r.icon || '🎁'}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-800 truncate">{r.name}</div>
+                <div className="text-xs text-slate-500">{r.price} נק'</div>
+              </div>
+              <button title="ערוך" onClick={() => setForm(r.id)} className="p-2 text-slate-600 hover:bg-slate-200 rounded-lg"><Pencil size={18} /></button>
+              <button title="מחק" onClick={() => { if (window.confirm(`למחוק את "${r.name}" מהקטלוג?`)) onAction('delete_reward', { rewardId: r.id }); }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="היסטוריית הוצאות" icon={List}>
+        {log.length === 0 ? (
+          <div className="text-center text-slate-400 py-4">עדיין לא הוצאו נקודות</div>
+        ) : (
+          <div className="space-y-2">
+            {log.slice(0, 15).map(e => (
+              <div key={e.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-800 truncate">{e.name}</div>
+                  <div className="text-xs text-slate-500">{data.kids.find(k => k.id === e.kidId)?.name} • {e.points} נק' • {formatLogDate(e.at)}</div>
+                </div>
+                <button onClick={() => { if (window.confirm('לבטל את ההוצאה ולהחזיר את הנקודות?')) onAction('refund_spend', { entryId: e.id }); }} className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"><RotateCcw size={12} /> בטל</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
 // ---- ניקוד ----
 
 const PointsTab = ({ data, onAction }) => {
@@ -1355,7 +1579,7 @@ const PointsTab = ({ data, onAction }) => {
 
 // ---- הגדרות ----
 
-// כרטיס הגדרה למדד (פיצה / מפלצת): ערך נוכחי, ערך מקסימלי ואיפוס
+// כרטיס הגדרה למדד (יציאה משפחתית / מפלצת): ערך נוכחי, ערך מקסימלי ואיפוס
 const MeterCard = ({ title, icon, current, max, currentLabel, maxLabel, onSave, resetLabel, resetConfirm, onReset }) => {
   const [cur, setCur] = useState(String(current));
   const [mx, setMx] = useState(String(max));
@@ -1396,11 +1620,11 @@ const SettingsTab = ({ data, now, onAction }) => {
     <div className="space-y-4">
       <MeterCard
         key={`pizza-${getPizza(data)}-${data.familyGoal}`}
-        title="פיצה משפחתית" icon={Star}
+        title="יציאה משפחתית" icon={Star}
         current={getPizza(data)} max={data.familyGoal}
-        currentLabel="נקודות כרגע" maxLabel="יעד לפיצה"
+        currentLabel="נקודות כרגע" maxLabel="יעד ליציאה"
         onSave={(current, max) => onAction('set_pizza', { current, goal: max })}
-        resetLabel="אפס פיצה" resetConfirm="לאפס את הפיצה המשפחתית ל-0?"
+        resetLabel="אפס יציאה" resetConfirm="לאפס את מד היציאה המשפחתית ל-0?"
         onReset={() => onAction('reset_pizza')}
       />
       <MeterCard
@@ -1449,11 +1673,12 @@ const SettingsTab = ({ data, now, onAction }) => {
 const AdminPanelContent = ({ data, onAction }) => {
   const [tab, setTab] = useState('home');
   const now = useNow(data.timeOverride);
-  const pendingCount = data.kids.reduce((a, k) => a + k.tasks.filter(t => t.status === 'pending_approval').length, 0);
+  const pendingCount = data.kids.reduce((a, k) => a + k.tasks.filter(t => t.status === 'pending_approval').length, 0) + (data.orders || []).length;
 
   const tabs = [
     { key: 'home', label: 'בית', icon: Home, badge: pendingCount },
     { key: 'tasks', label: 'משימות', icon: ListChecks },
+    { key: 'rewards', label: 'פרסים', icon: Gift },
     { key: 'points', label: 'ניקוד', icon: Coins },
     { key: 'settings', label: 'הגדרות', icon: SlidersHorizontal }
   ];
@@ -1467,6 +1692,7 @@ const AdminPanelContent = ({ data, onAction }) => {
       )}
       {tab === 'home' && <HomeTab data={data} now={now} onAction={onAction} />}
       {tab === 'tasks' && <TasksTab data={data} onAction={onAction} />}
+      {tab === 'rewards' && <RewardsTab data={data} onAction={onAction} />}
       {tab === 'points' && <PointsTab data={data} onAction={onAction} />}
       {tab === 'settings' && <SettingsTab data={data} now={now} onAction={onAction} />}
 
