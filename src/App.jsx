@@ -229,12 +229,13 @@ const getEveningInfo = (now) => {
   };
 };
 
-// סדר הלילות בשבוע (ראשון עד שבת, בלי ליל שישי)
+// השבוע מתחיל במוצאי שבת: הלילות הם שבת (מוצ"ש), ראשון עד חמישי, בלי ליל שישי
 const getWeekNights = (eveningDate) => {
-  const sunday = addDays(eveningDate, -eveningDate.getUTCDay());
-  return DAY_KEYS
-    .map((day, i) => ({ day, dateKey: toDateKey(addDays(sunday, i)) }))
-    .filter(n => n.day !== BED_SKIP_EVENING);
+  const saturday = addDays(eveningDate, -((eveningDate.getUTCDay() + 1) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(saturday, i);
+    return { day: DAY_KEYS[date.getUTCDay()], dateKey: toDateKey(date) };
+  }).filter(n => n.day !== BED_SKIP_EVENING);
 };
 
 const sleepAtToMinutes = (sleepAt) => {
@@ -271,7 +272,7 @@ const formatDuration = (mins) => {
 const realTime = getJerusalemNow();
 
 const INITIAL_DATA = { 
-  familyGoal: 350, bossHP: 500, maxBossHP: 500, currentDay: realTime.day, currentTimePhase: realTime.phase,
+  familyGoal: 350, pizzaOffset: 0, bossHP: 500, maxBossHP: 500, currentDay: realTime.day, currentTimePhase: realTime.phase,
   lastResetDate: toDateKey(getLogicalDate(realTime)), timeOverride: null, bedtime: { days: {} },
   kids: [
     { id: 1, name: "איתמר", ageGroup: "big", color: "bg-cyan-400", lightColor: "bg-cyan-100", points: 120, lifetimePoints: 1500, familyPoints: 120, inventory: { shields: 2 }, activeEffects: { doublePointsUntil: 0 }, tasks: [] },
@@ -283,6 +284,10 @@ const INITIAL_DATA = {
 // ==========================================
 // לוגיקה משותפת (רצה בתוך טרנזקציה על המסמך העדכני)
 // ==========================================
+
+// הפיצה = סכום התרומות של הילדים + תיקון ידני של ההורים (איפוס / הגדרת ערך)
+const getKidsPizzaSum = (d) => d.kids.reduce((a, k) => a + (k.familyPoints || k.points || 0), 0);
+const getPizza = (d) => Math.max(0, getKidsPizzaSum(d) + (d.pizzaOffset || 0));
 
 const isDoubleActive = (kid) => (kid.activeEffects?.doublePointsUntil || 0) > Date.now();
 
@@ -672,10 +677,11 @@ export default function App() {
                     kid.tasks = kid.tasks.filter(t => t.id !== payload.taskId);
                     break;
                 case 'add_task': {
-                    const target = d.kids.find(k => k.id === payload.kidId);
-                    if (!target) return false;
-                    target.tasks.push(payload.task);
-                    msg = "המשימה נוספה בהצלחה!";
+                    // משימה אחת לכמה ילדים: כל ילד מקבל עותק נפרד עם סטטוס משלו
+                    const targets = d.kids.filter(k => payload.kidIds.includes(k.id));
+                    if (targets.length === 0) return false;
+                    targets.forEach(k => k.tasks.push({ ...payload.task, id: `${payload.task.id}-${k.id}` }));
+                    msg = targets.length > 1 ? `המשימה נוספה ל-${targets.length} ילדים!` : "המשימה נוספה בהצלחה!";
                     break;
                 }
                 case 'manage_points':
@@ -686,6 +692,20 @@ export default function App() {
                     break;
                 case 'reset_boss':
                     d.bossHP = d.maxBossHP;
+                    break;
+                case 'set_boss':
+                    d.maxBossHP = payload.max;
+                    d.bossHP = Math.min(payload.hp, payload.max);
+                    msg = "המפלצת עודכנה";
+                    break;
+                case 'set_pizza':
+                    d.familyGoal = payload.goal;
+                    d.pizzaOffset = payload.current - getKidsPizzaSum(d);
+                    msg = "הפיצה עודכנה";
+                    break;
+                case 'reset_pizza':
+                    d.pizzaOffset = -getKidsPizzaSum(d);
+                    msg = "הפיצה אופסה";
                     break;
                 case 'reset_all': {
                     // איפוס משחק מלא; שומרים זמן, מצב בדיקה ויומן שעות השינה
@@ -809,7 +829,7 @@ export default function App() {
         <div className="flex justify-between items-end gap-4 mt-4">
            <div className="flex-1 min-w-[30%]">
                {/* Updated to use familyPoints for Pizza progress */}
-               <BossBar current={data.kids.reduce((a,b)=>a+(b.familyPoints || b.points),0)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
+               <BossBar current={getPizza(data)} max={data.familyGoal} label="פיצה משפחתית" color="bg-yellow-400" />
            </div>
            <div className="flex-none z-30 mx-2">
                <MainTitle />
@@ -1102,7 +1122,7 @@ const BedtimeCard = ({ data, now, onAction }) => {
           {bank.nights.map(n => (
             <div key={n.dateKey} className={`rounded-xl border p-3 ${n.dateKey === ev.dateKey ? 'border-indigo-300 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-20 font-bold text-slate-700">{DAYS_HEBREW[n.day]} <span className="text-xs text-slate-400 font-normal">{formatShortDate(n.dateKey)}</span></div>
+                <div className="w-20 font-bold text-slate-700">{n.day === 'saturday' ? 'מוצ"ש' : DAYS_HEBREW[n.day]} <span className="text-xs text-slate-400 font-normal">{formatShortDate(n.dateKey)}</span></div>
                 <div className="flex-1 text-sm text-slate-600">
                   {n.off ? <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-bold">חופש / בייביסיטר</span>
                     : n.sleepAt ? <span>ישן ב-<b>{n.sleepAt}</b> • נוצלו {n.spent} דק'</span>
@@ -1128,7 +1148,7 @@ const BedtimeCard = ({ data, now, onAction }) => {
 };
 
 const StatusCard = ({ data }) => {
-  const pizza = data.kids.reduce((a, b) => a + (b.familyPoints || b.points), 0);
+  const pizza = getPizza(data);
   return (
     <Card title="מצב המשחק" icon={Star}>
       <div className="grid grid-cols-2 gap-3 text-center">
@@ -1160,19 +1180,27 @@ const TaskForm = ({ kid, data, onSubmit, onCancel }) => {
     title: '', value: 10, time: data.currentTimePhase, isOneTime: false, days: [data.currentDay], icon: 'star', impact: 'boss'
   });
   const [error, setError] = useState('');
+  const [kidIds, setKidIds] = useState([kid.id]);
 
   const toggleDay = (key) => setTask(prev => ({ ...prev, days: prev.days.includes(key) ? prev.days.filter(d => d !== key) : [...prev.days, key] }));
+  const toggleKid = (id) => setKidIds(prev => prev.includes(id) ? prev.filter(k => k !== id) : [...prev, id]);
 
   const submit = () => {
     if (!task.title.trim()) return setError('חסר שם למשימה');
+    if (kidIds.length === 0) return setError('בחר לפחות ילד אחד');
     if (task.days.length === 0) return setError('בחר לפחות יום אחד');
     if (!Number.isInteger(task.value) || task.value < 1) return setError('הניקוד צריך להיות מספר חיובי');
-    onSubmit({ id: 't' + Date.now(), title: task.title.trim(), value: task.value, time: task.time, status: 'open', isOneTime: task.isOneTime, days: task.days, icon: task.icon, impact: task.impact });
+    onSubmit(kidIds, { id: 't' + Date.now(), title: task.title.trim(), value: task.value, time: task.time, status: 'open', isOneTime: task.isOneTime, days: task.days, icon: task.icon, impact: task.impact });
   };
 
   return (
     <div className="space-y-4">
-      <div className="text-sm text-slate-500">משימה חדשה עבור <b className="text-slate-800">{kid.name}</b></div>
+      <div>
+        <div className="text-xs font-bold text-slate-500 mb-2">עבור מי (אפשר כמה ילדים, כל אחד מסמן בנפרד)</div>
+        <div className="flex gap-2">
+          {data.kids.map(k => <Chip key={k.id} active={kidIds.includes(k.id)} onClick={() => toggleKid(k.id)} className="flex-1">{k.name}</Chip>)}
+        </div>
+      </div>
 
       <input type="text" placeholder="שם המשימה (למשל: סידור חדר)" className="w-full p-3 rounded-xl border border-slate-300 text-lg" value={task.title} onChange={e => setTask({ ...task, title: e.target.value })} />
 
@@ -1266,7 +1294,7 @@ const TasksTab = ({ data, onAction }) => {
 
       {showForm ? (
         <Card title="משימה חדשה" icon={Plus}>
-          <TaskForm kid={kid} data={data} onCancel={() => setShowForm(false)} onSubmit={(task) => { onAction('add_task', { kidId: kid.id, task }); setShowForm(false); }} />
+          <TaskForm kid={kid} data={data} onCancel={() => setShowForm(false)} onSubmit={(kidIds, task) => { onAction('add_task', { kidIds, task }); setShowForm(false); }} />
         </Card>
       ) : (
         <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-md flex items-center justify-center gap-2"><Plus size={20} /> משימה חדשה ל{kid.name}</button>
@@ -1342,6 +1370,33 @@ const PointsTab = ({ data, onAction }) => {
 
 // ---- הגדרות ----
 
+// כרטיס הגדרה למדד (פיצה / מפלצת): ערך נוכחי, ערך מקסימלי ואיפוס
+const MeterCard = ({ title, icon, current, max, currentLabel, maxLabel, onSave, resetLabel, resetConfirm, onReset }) => {
+  const [cur, setCur] = useState(String(current));
+  const [mx, setMx] = useState(String(max));
+  const curN = parseInt(cur, 10);
+  const mxN = parseInt(mx, 10);
+  const valid = Number.isInteger(curN) && curN >= 0 && Number.isInteger(mxN) && mxN >= 1;
+  const dirty = cur !== String(current) || mx !== String(max);
+
+  return (
+    <Card title={title} icon={icon} right={<span className="text-sm font-black text-slate-600">{current} / {max}</span>}>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs font-bold text-slate-500">{currentLabel}
+          <input type="number" min="0" value={cur} onChange={e => setCur(e.target.value)} className="mt-1 w-full p-2 rounded-xl border border-slate-300 text-base font-bold text-slate-800" />
+        </label>
+        <label className="text-xs font-bold text-slate-500">{maxLabel}
+          <input type="number" min="1" value={mx} onChange={e => setMx(e.target.value)} className="mt-1 w-full p-2 rounded-xl border border-slate-300 text-base font-bold text-slate-800" />
+        </label>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button disabled={!valid || !dirty} onClick={() => onSave(curN, mxN)} className="flex-1 bg-blue-600 text-white py-2 rounded-xl font-bold disabled:opacity-40">שמור</button>
+        <button onClick={() => { if (window.confirm(resetConfirm)) onReset(); }} className="px-4 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 text-sm">{resetLabel}</button>
+      </div>
+    </Card>
+  );
+};
+
 const SettingsTab = ({ data, now, onAction }) => {
   const [simDay, setSimDay] = useState(data.currentDay);
   const [simTime, setSimTime] = useState('21:00');
@@ -1354,6 +1409,25 @@ const SettingsTab = ({ data, now, onAction }) => {
 
   return (
     <div className="space-y-4">
+      <MeterCard
+        key={`pizza-${getPizza(data)}-${data.familyGoal}`}
+        title="פיצה משפחתית" icon={Star}
+        current={getPizza(data)} max={data.familyGoal}
+        currentLabel="נקודות כרגע" maxLabel="יעד לפיצה"
+        onSave={(current, max) => onAction('set_pizza', { current, goal: max })}
+        resetLabel="אפס פיצה" resetConfirm="לאפס את הפיצה המשפחתית ל-0?"
+        onReset={() => onAction('reset_pizza')}
+      />
+      <MeterCard
+        key={`boss-${data.bossHP}-${data.maxBossHP}`}
+        title="מפלצת הבלגן" icon={Zap}
+        current={data.bossHP} max={data.maxBossHP}
+        currentLabel="חיים כרגע" maxLabel="חיים מקסימליים"
+        onSave={(current, max) => onAction('set_boss', { hp: current, max })}
+        resetLabel="מלא חיים מחדש" resetConfirm="למלא את חיי המפלצת מחדש?"
+        onReset={() => onAction('reset_boss')}
+      />
+
       <Card title="בדיקת האפליקציה (מצב בדיקה)" icon={FlaskConical}>
         <p className="text-xs text-slate-500 mb-3">נותן לראות איך האפליקציה נראית ביום ושעה אחרים (למשל 21:10 כדי לבדוק את כפתור השינה). המצב חוזר לזמן אמת אחרי חצי שעה.</p>
         {now.simulated && (
@@ -1371,12 +1445,6 @@ const SettingsTab = ({ data, now, onAction }) => {
         </div>
       </Card>
 
-      <Card title="מפלצת הבלגן" icon={Zap}>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-slate-600">חיים: <b>{data.bossHP} / {data.maxBossHP}</b></span>
-          <button onClick={() => { if (window.confirm('למלא את חיי המפלצת מחדש?')) onAction('reset_boss'); }} className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-bold hover:bg-red-200 text-sm">מלא חיים מחדש</button>
-        </div>
-      </Card>
 
       <section className="bg-red-50 p-4 rounded-2xl border border-red-200">
         <h3 className="font-black text-red-600 mb-2 flex items-center gap-2"><AlertTriangle size={18} /> אזור סכנה</h3>
