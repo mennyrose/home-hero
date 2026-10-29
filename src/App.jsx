@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HebrewCalendar, Location } from '@hebcal/core';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, updateDoc, setDoc, runTransaction } from 'firebase/firestore';
 import { getAuth, signInAnonymously, signInWithPopup, signInWithCustomToken, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -175,38 +176,117 @@ const getPhase = (hour) => {
 const getActiveOverride = (override) =>
   override && Date.now() - (override.setAt || 0) < OVERRIDE_TTL_MS ? override : null;
 
-// date הוא תאריך UTC "טהור" של היום בישראל (שימושי לחישובי ימים/שבועות)
-const getJerusalemNow = (override) => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jerusalem', hourCycle: 'h23', weekday: 'long',
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-  }).formatToParts(new Date());
+const JERUSALEM_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Jerusalem', hourCycle: 'h23', weekday: 'long',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+});
+
+// הרכיבים של רגע (ms) בשעון ישראל. date הוא תאריך UTC "טהור" של היום בישראל (שימושי לחישובי ימים/שבועות)
+const getJerusalemParts = (ms) => {
+  const parts = JERUSALEM_FORMAT.formatToParts(new Date(ms));
   const get = (type) => parts.find(p => p.type === type).value;
+  const hour = parseInt(get('hour'), 10) % 24;
+  const minute = parseInt(get('minute'), 10);
+  const date = new Date(Date.UTC(parseInt(get('year'), 10), parseInt(get('month'), 10) - 1, parseInt(get('day'), 10)));
+  return { day: get('weekday').toLowerCase(), hour, minute, minutes: hour * 60 + minute, date, dateKey: toDateKey(date) };
+};
 
-  let day = get('weekday').toLowerCase();
-  let hour = parseInt(get('hour'), 10) % 24;
-  let minute = parseInt(get('minute'), 10);
-  let date = new Date(Date.UTC(parseInt(get('year'), 10), parseInt(get('month'), 10) - 1, parseInt(get('day'), 10)));
+// הפוך: תאריך (UTC "טהור") + שעה בשעון ישראל -> ms
+const jerusalemToMs = (date, hour, minute) => {
+  const guess = date.getTime() + (hour * 60 + minute) * 60000;
+  const p = getJerusalemParts(guess);
+  return guess - (p.date.getTime() + p.minutes * 60000 - guess);
+};
 
+// במצב בדיקה השעון מתחיל מהיום והשעה שהוגדרו וממשיך לרוץ
+const getJerusalemNow = (override) => {
+  const realMs = Date.now();
   const active = getActiveOverride(override);
+  let ms = realMs;
   if (active) {
-    date = addDays(date, DAY_KEYS.indexOf(active.day) - DAY_KEYS.indexOf(day));
-    day = active.day; hour = active.hour; minute = active.minute;
+    const real = getJerusalemParts(realMs);
+    const date = addDays(real.date, DAY_KEYS.indexOf(active.day) - DAY_KEYS.indexOf(real.day));
+    ms = jerusalemToMs(date, active.hour, active.minute) + Math.max(0, realMs - (active.setAt || realMs));
   }
-  return { day, hour, minute, minutes: hour * 60 + minute, date, dateKey: toDateKey(date), phase: getPhase(hour), simulated: !!active };
+  const p = getJerusalemParts(ms);
+  return { ...p, ms, phase: getPhase(p.hour), simulated: !!active };
 };
 
 // "יום" לצורך איפוס משימות ושינה מסתיים ב-04:00 ולא בחצות
 const DAY_ROLLOVER_MIN = 4 * 60;
 const getLogicalDate = (now) => (now.minutes < DAY_ROLLOVER_MIN ? addDays(now.date, -1) : now.date);
 
-const useNow = (override) => {
+const useNow = (override, tickMs = 15000) => {
   const [, setTick] = useState(0);
   useEffect(() => {
-    const i = setInterval(() => setTick(t => t + 1), 15000);
+    const i = setInterval(() => setTick(t => t + 1), tickMs);
     return () => clearInterval(i);
-  }, []);
+  }, [tickMs]);
   return getJerusalemNow(override);
+};
+
+// ==========================================
+// שבת וחגים (חיפה): טיימרים, מסך שבת ו"שבוע טוב"
+// ==========================================
+
+const CANDLE_MINS_BEFORE_SUNSET = 22;   // מנהג חיפה
+const SHABBAT_COUNTDOWN_FROM_HOUR = 7;  // הטיימר לכניסת שבת/חג מתחיל ב-07:00
+const SHABBAT_ENTER_MS = 20 * 60000;    // 20 הדקות אחרי הדלקת הנרות
+const WEEK_END_VISIBLE_MS = 4 * 86400000;
+const HAIFA = Location.lookup('Haifa');
+
+// כל תקופות הקדושה (שבת/חג) סביב תאריך: [{ start, end, kind }] ב-ms. מחושב מקומית ללא אינטרנט
+const holyIntervalsCache = new Map();
+const getHolyIntervals = (ms) => {
+  const { dateKey } = getJerusalemParts(ms);
+  if (holyIntervalsCache.has(dateKey)) return holyIntervalsCache.get(dateKey);
+
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const events = HebrewCalendar.calendar({
+    start: new Date(y, m - 1, d - 4), end: new Date(y, m - 1, d + 10), location: HAIFA, il: true, sedrot: false,
+    candlelighting: true, candleLightingMins: -CANDLE_MINS_BEFORE_SUNSET
+  })
+    .filter(e => e.eventTime && ['Candle lighting', 'Havdalah'].includes(e.getDesc()))
+    .map(e => ({ t: e.eventTime.getTime(), end: e.getDesc() === 'Havdalah' }))
+    .sort((a, b) => a.t - b.t);
+
+  // רצף של חג צמוד לשבת הוא תקופה אחת: מתחילים בהדלקה הראשונה ומסיימים בהבדלה
+  const intervals = [];
+  let start = null;
+  events.forEach(e => {
+    if (!e.end && start === null) start = e.t;
+    else if (e.end && start !== null) {
+      intervals.push({ start, end: e.t, kind: getJerusalemParts(start).day === 'friday' ? 'shabbat' : 'chag' });
+      start = null;
+    }
+  });
+  holyIntervalsCache.set(dateKey, intervals);
+  return intervals;
+};
+
+// mode: none | countdown (עד הדלקה) | entering (20 דק' אחרי הדלקה) | shabbat | ended ("שבוע טוב", עד לחיצה)
+const getShabbatState = (nowMs, ackKey) => {
+  for (const iv of getHolyIntervals(nowMs)) {
+    const startDate = getJerusalemParts(iv.start).date;
+    const countdownFrom = jerusalemToMs(startDate, SHABBAT_COUNTDOWN_FROM_HOUR, 0);
+    if (nowMs >= countdownFrom && nowMs < iv.start) return { mode: 'countdown', iv, remaining: iv.start - nowMs };
+    if (nowMs >= iv.start && nowMs < iv.end) {
+      if (nowMs - iv.start < SHABBAT_ENTER_MS) return { mode: 'entering', iv, remaining: SHABBAT_ENTER_MS - (nowMs - iv.start) };
+      const morning = jerusalemToMs(addDays(startDate, 1), SHABBAT_COUNTDOWN_FROM_HOUR, 0);
+      return { mode: 'shabbat', iv, toEnd: nowMs >= morning ? iv.end - nowMs : null };
+    }
+    if (nowMs >= iv.end && nowMs - iv.end < WEEK_END_VISIBLE_MS && ackKey !== String(iv.end)) return { mode: 'ended', iv };
+  }
+  return { mode: 'none' };
+};
+
+const formatHMS = (ms) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(total / 3600)}:${pad2(Math.floor((total % 3600) / 60))}:${pad2(total % 60)}`;
+};
+const formatMS = (ms) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
 };
 
 // ==========================================
@@ -497,6 +577,70 @@ const CatalogModal = ({ data, onOrder, onClose }) => {
   );
 };
 
+// --- Shabbat (kiosk) ---
+const Candle = ({ delay }) => (
+  <div className="relative flex flex-col items-center">
+    <div className="shabbat-flame" style={{ animationDelay: delay }}></div>
+    <div className="w-1 h-2 bg-black/70"></div>
+    <div className="w-5 h-20 bg-gradient-to-r from-amber-50 via-white to-amber-100 border-2 border-black rounded-t-sm"></div>
+    <div className="w-9 h-3 bg-yellow-600 border-2 border-black rounded-sm"></div>
+    <div className="w-2 h-6 bg-yellow-700 border-x-2 border-black"></div>
+    <div className="w-12 h-3 bg-yellow-700 border-2 border-black rounded-sm"></div>
+  </div>
+);
+
+// מהדלקת נרות ועד צאת השבת/החג: ציור המשפחה, נרות, וטיימר/שעון
+const ShabbatScreen = ({ state, now }) => {
+  const greeting = state.iv.kind === 'shabbat' ? 'שבת שלום' : 'חג שמח';
+  const endLabel = state.iv.kind === 'shabbat' ? 'עד צאת השבת' : 'עד צאת החג';
+  return (
+    <div className="h-[100dvh] relative overflow-hidden font-comic bg-slate-900">
+      <img src="./shabbat-family.jpg" alt="" className="absolute inset-0 w-full h-full object-cover object-center" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/50 pointer-events-none"></div>
+
+      {/* הטיימר בפינה כדי לא לכסות את הפנים בציור */}
+      <div className="absolute top-3 right-3 md:right-6 z-10 flex flex-col items-end gap-2">
+        <div className={`bg-yellow-300 ${COMIC_BORDER} rounded-2xl px-6 py-2 text-center shadow-[6px_6px_0_0_#000]`}>
+          {state.mode === 'entering' ? (
+            <>
+              <div className="text-2xl md:text-4xl font-black text-red-600">20 דקות!</div>
+              <div className="text-4xl md:text-6xl font-black tabular-nums" dir="ltr">{formatMS(state.remaining)}</div>
+            </>
+          ) : (
+            <>
+              <div className="text-3xl md:text-5xl font-black">{greeting}</div>
+              <div className="text-4xl md:text-6xl font-black tabular-nums" dir="ltr">{pad2(now.hour)}:{pad2(now.minute)}</div>
+            </>
+          )}
+        </div>
+        {state.mode === 'shabbat' && state.toEnd !== null && (
+          <div className={`bg-white ${COMIC_BORDER} rounded-full px-4 py-1 text-base md:text-xl font-black shadow-[4px_4px_0_0_#000]`}>
+            {endLabel}: <span className="tabular-nums" dir="ltr">{formatHMS(state.toEnd)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="absolute bottom-4 left-5 md:left-10 flex items-end gap-6 z-10 pointer-events-none">
+        <Candle delay="0s" />
+        <Candle delay="0.6s" />
+      </div>
+    </div>
+  );
+};
+
+// בצאת שבת/חג: נשאר על המסך עד שלוחצים, ואז חוזרים לשבוע הרגיל
+const WeekEndScreen = ({ onStart }) => (
+  <button onClick={onStart} className="h-[100dvh] w-full font-comic flex flex-col items-center justify-center gap-6 text-center" style={BG_STYLE}>
+    <div className="flex items-end gap-4 md:gap-8">
+      {[56, 88, 56].map((size, i) => (
+        <Star key={i} size={size} className="text-yellow-300 fill-yellow-300 drop-shadow-[4px_4px_0_#000] animate-bounce" style={{ animationDelay: `${i * 0.2}s` }} />
+      ))}
+    </div>
+    <div className="text-6xl md:text-8xl font-black text-white" style={{ textShadow: '4px 4px 0 #000' }}>שבוע טוב!</div>
+    <div className={`bg-white text-black text-lg md:text-2xl font-black px-6 py-2 rounded-full ${COMIC_BORDER} ${COMIC_SHADOW}`}>לחצו כאן להתחלת שבוע חדש</div>
+  </button>
+);
+
 // --- Bedtime (kiosk) ---
 const BedtimePanel = ({ data, now, onSleep }) => {
   const ev = getEveningInfo(now);
@@ -555,7 +699,7 @@ export default function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [status, setStatus] = useState('connecting');
   const [errorMsg, setErrorMsg] = useState(null);
-  const now = useNow(data?.timeOverride);
+  const now = useNow(data?.timeOverride, 1000);
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -704,6 +848,18 @@ export default function App() {
     } catch (err) {
         console.error("Order Error:", err);
         alert("שגיאה בשליחת ההזמנה: " + err.message);
+    }
+  };
+
+  // לחיצה על "שבוע טוב!": נשמרת במסד כדי שכל המכשירים יחזרו לשבוע הרגיל
+  const handleWeekStart = async () => {
+    const s = getShabbatState(now.ms, data.shabbatAck);
+    if (s.mode !== 'ended') return;
+    try {
+        await updateDoc(MAIN_DOC_REF, { shabbatAck: String(s.iv.end) });
+    } catch (err) {
+        console.error("Week Start Error:", err);
+        alert("שגיאה: " + err.message);
     }
   };
 
@@ -938,6 +1094,10 @@ export default function App() {
   ];
   const bedtimeVisible = getEveningInfo(now).inWindow;
 
+  const shabbat = getShabbatState(now.ms, data.shabbatAck);
+  if (shabbat.mode === 'entering' || shabbat.mode === 'shabbat') return <ShabbatScreen state={shabbat} now={now} />;
+  if (shabbat.mode === 'ended') return <WeekEndScreen onStart={handleWeekStart} />;
+
   return (
     <div className="h-[100dvh] font-comic overflow-hidden flex flex-col relative" style={BG_STYLE}>
 
@@ -951,6 +1111,11 @@ export default function App() {
              <button onClick={() => setShowLoginModal(true)} className="opacity-50 hover:opacity-100 transition"><Settings className="text-white drop-shadow-md"/></button>
              <button onClick={() => setShowCatalog(true)} className={`bg-white text-black text-xs font-black px-3 py-0.5 rounded-full flex items-center gap-1 ${COMIC_BTN}`}><Gift size={14} /> קטלוג</button>
            </div>
+           {shabbat.mode === 'countdown' && (
+             <div className={`bg-yellow-300 text-black px-4 py-0.5 rounded-full text-sm font-black flex items-center gap-2 ${COMIC_BORDER} ${COMIC_SHADOW_SM}`}>
+               <Hourglass size={16} /> עד כניסת {shabbat.iv.kind === 'shabbat' ? 'השבת' : 'החג'}: <span className="tabular-nums" dir="ltr">{formatHMS(shabbat.remaining)}</span>
+             </div>
+           )}
            <div className={`bg-white px-3 py-0.5 rounded-full text-xs font-black text-black flex items-center gap-2 ${COMIC_BORDER} shadow-sm`}>
                 <span className="flex items-center gap-1">
                   {data.currentTimePhase === 'morning' ? <Sun size={14} className="text-orange-500"/> : data.currentTimePhase === 'noon' ? <Cloud size={14} className="text-blue-400"/> : <Moon size={14} className="text-indigo-600"/>}
